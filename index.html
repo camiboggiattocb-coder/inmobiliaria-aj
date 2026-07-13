@@ -45,6 +45,7 @@
   .brand h1 { font-size: 13.5px; font-weight: 600; color: #cddae3; letter-spacing: .3px; line-height: 1.3; }
   .brand span { font-size: 11px; color: #8fb0c4; text-transform: uppercase; letter-spacing: 1px; }
   .nav { padding: 12px 0; flex: 1; overflow-y: auto; }
+  .nav-sep { padding: 14px 20px 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: #7d9cb0; font-weight: 700; }
   .nav-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: #6f93a8; padding: 14px 20px 6px; }
   .nav-item {
     display: flex; align-items: center; gap: 11px; padding: 9px 20px; color: #c4d4de;
@@ -53,6 +54,8 @@
   }
   .nav-item:hover { background: rgba(255,255,255,.06); color: #fff; }
   .nav-item.active { background: rgba(255,255,255,.09); color: #fff; border-left-color: var(--accent); font-weight: 600; }
+  /* Tamaño base de los íconos: evita que se estiren si no hay una regla específica */
+  .ic { width: 16px; height: 16px; flex-shrink: 0; vertical-align: middle; }
   .nav-item .ic { width: 17px; height: 17px; flex-shrink: 0; opacity: .85; }
   .nav-foot { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.1); font-size: 12px; color: #8fb0c4; }
   .user-badge { display: flex; align-items: center; gap: 9px; }
@@ -89,6 +92,9 @@
   .grid { display: grid; gap: 16px; }
   .stat-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  /* Grilla de tarjetas de indicadores (panel principal y tablero) */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .stats > .stat, .stats > .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
   .stat { padding: 18px 20px; }
   .stat .lbl { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
   .stat .val { font-size: 28px; font-weight: 700; color: var(--ink); margin-top: 6px; letter-spacing: -.5px; }
@@ -102,6 +108,19 @@
 
   /* Table */
   .table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; box-shadow: var(--shadow); }
+  /* Barra de filtros */
+  .filters { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .filters-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .filters-head h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--brand); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .filters-grid .fg { display: flex; flex-direction: column; gap: 4px; }
+  .filters-grid label { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); }
+  .filters-grid input, .filters-grid select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--surface); }
+  .filters-grid input:focus, .filters-grid select:focus { outline: none; border-color: var(--brand); }
+  .filter-range { display: flex; gap: 6px; align-items: center; }
+  .filter-range input { width: 100%; }
+  .filter-count { font-size: 12.5px; color: var(--ink-soft); }
+  .filter-count b { color: var(--brand); }
   table { width: 100%; border-collapse: collapse; }
   thead th { background: #f7f9fb; text-align: left; padding: 11px 16px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-soft); font-weight: 700; border-bottom: 1px solid var(--line); white-space: nowrap; }
   tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); font-size: 13.5px; vertical-align: middle; }
@@ -158,6 +177,7 @@
     width: 100%; padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink);
   }
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
   .field .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
 
   /* Drive link */
@@ -233,6 +253,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script>
   // 🔧 REEMPLAZÁ ESTOS VALORES POR LOS DE TU PROYECTO FIREBASE 🔧
   const firebaseConfig = {
@@ -246,6 +267,9 @@
   firebase.initializeApp(firebaseConfig);
   const fbAuth = firebase.auth();
   const fbDB = firebase.firestore();
+  // Storage solo se inicializa si está habilitado (requiere plan Blaze en Firebase)
+  let fbStorage = null;
+  try { if (typeof firebase.storage === "function") fbStorage = firebase.storage(); } catch(e) { fbStorage = null; }
 </script>
 </head>
 <body>
@@ -355,6 +379,11 @@ const I = {
   info:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   trash:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
   check:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+  search:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  chart:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  up:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
+  file:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  down:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
 };
 
 /* ---------- Datos (se cargan desde Firebase al iniciar) ----------
@@ -368,11 +397,15 @@ const DB = {
   nextCodigo: 1,
 };
 
-const STATE = { role:"admin", page:"dashboard", usuario:null };
+const STATE = { role:"admin", page:"dashboard", usuario:null,
+  // Filtros de búsqueda (se mantienen mientras dura la sesión)
+  fSales: { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" },
+  fRentals: { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" },
+};
 
 /* ---------- Configuración de roles ---------- */
 const ROLES = {
-  admin:   { name:"Acceso total",      sub:"Todos los módulos",       av:"A", pages:["dashboard","properties","sales","rentals","contracts","alarms","users"], edit:true },
+  admin:   { name:"Acceso total",      sub:"Todos los módulos",       av:"A", pages:["dashboard","properties","sales","rentals","contracts","alarms","reports","users"], edit:true },
   sales:   { name:"Solo ventas",        sub:"Módulo de Ventas",        av:"V", pages:["sales"],            edit:true },
   rentals: { name:"Solo alquileres",    sub:"Alquileres y contratos",  av:"AL", pages:["rentals","contracts","alarms"], edit:true },
   viewer:  { name:"Visor (colega)",     sub:"Solo lectura · Ventas",   av:"C", pages:["sales"],            edit:false },
@@ -387,12 +420,53 @@ const fmt = (n, cur="ARS") => {
 };
 const fdate = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
-const addMonths = (d, n) => { const dt = new Date(d); dt.setMonth(dt.getMonth()+n); return dt.toISOString().slice(0,10); };
-const today = "2026-06-17";
+const addMonths = (d, n) => { const dt = new Date(d+"T12:00:00"); dt.setMonth(dt.getMonth()+n); return isoDate(dt); };
+// Fecha en formato AAAA-MM-DD a partir de un objeto Date (sin desfases de zona horaria)
+function isoDate(dt){
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth()+1).padStart(2,"0");
+  const d = String(dt.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ADJUNTAR DOCUMENTOS EN EL SISTEMA (Firebase Storage)
+   ────────────────────────────────────────────────────────────
+   false = los documentos van a la carpeta de Drive (SIN COSTO).
+   true  = se adjuntan dentro del sistema.
+           OJO: requiere activar Storage en Firebase, que exige
+           el plan Blaze (pago por uso, pide tarjeta).
+           Si lo ponés en true sin activarlo, los botones fallan.
+   ════════════════════════════════════════════════════════════ */
+const USAR_STORAGE = false;
+// FECHA REAL DEL DÍA: se calcula cada vez que se abre el sistema.
+const today = isoDate(new Date());
+// Límites para los campos de fecha (evita que se cargue un año inválido como 12026)
+const MIN_FECHA = "2000-01-01";
+const MAX_FECHA = "2099-12-31";
 const prop = id => DB.properties.find(p=>p.id===id);
 const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const isVivienda = t => t==="Casa" || t==="Departamento";
 const esVendida = p => p.enVenta && p.estadoOp === "Vendida";
+
+/* Estado REAL del contrato, calculado según las fechas y la fecha de hoy.
+   - Si el inicio todavía no llegó  → "A comenzar"
+   - Si ya terminó                  → "Finalizado"
+   - Si está en curso               → "Vigente"
+   Los estados cargados a mano que son definitivos (Finalizado, Rescindido)
+   tienen prioridad: si alguien lo marcó así, se respeta. */
+function estadoContrato(c){
+  if (!c) return "—";
+  if (c.estado === "Rescindido" || c.estado === "Finalizado") return c.estado;
+  if (c.inicio && daysBetween(today, c.inicio) > 0) return "A comenzar";
+  if (c.fin && daysBetween(c.fin, today) > 0) return "Finalizado";
+  return "Vigente";
+}
+// ¿El contrato está activo hoy? (ocupa la propiedad)
+function contratoActivo(c){
+  const e = estadoContrato(c);
+  return e === "Vigente" || e === "A comenzar";
+}
 const can = () => ROLES[STATE.role].edit;
 
 /* ---------- Motor de alarmas ---------- */
@@ -400,12 +474,16 @@ function computeAlarms() {
   const out = [];
   DB.contracts.forEach(c => {
     const p = prop(c.propId);
+    // Los contratos finalizados o rescindidos ya no generan alarmas
+    const est = estadoContrato(c);
+    if (est === "Finalizado" || est === "Rescindido") return;
     if (c.proxActualiz) {
       const dd = daysBetween(today, c.proxActualiz);
       if (dd <= 30) out.push({ level: dd<0?"red":"amber", icon:I.money,
         title:`Actualización de alquiler — ${p?.titulo||"Propiedad"}`,
-        desc:`Ajuste por ${c.indice} ${dd<0?"vencido":"a aplicar"} el ${fdate(c.proxActualiz)}`,
-        when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals" });
+        desc:`Ajuste por ${c.indice} ${dd<0?"vencido":"a aplicar"} el ${fdate(c.proxActualiz)}. Valor actual: ${fmt(c.valor,c.moneda)}.`,
+        when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
+        action:`Actualiz.form(${c.id})`, actionLabel:"Actualizar" });
     }
     if (c.fin) {
       const dd = daysBetween(today, c.fin);
@@ -437,13 +515,16 @@ function computeAlarms() {
     }
   });
   DB.leads.forEach(l => {
-    if (l.proxima) {
+    // AGENDA: la próxima acción queda pendiente hasta que se marque como ejecutada.
+    // No desaparece sola: si la fecha pasó, se muestra atrasada.
+    if (l.proxima && !l.accionHecha && l.estado !== "Descartado") {
       const dd = daysBetween(today, l.proxima);
-      if (dd <= 2) { const p = prop(l.propId);
-        out.push({ level: dd<0?"red":"blue", icon:I.users,
-          title:`Seguimiento de interesado — ${l.nombre}`,
-          desc:`${p?.titulo||""} · ${l.estado}. Próximo contacto ${fdate(l.proxima)}`,
-          when: dd<0?`Atrasado ${-dd} días`:(dd===0?"Hoy":`En ${dd} días`), cat:"sales" });
+      if (dd <= 7) { const p = prop(l.propId);
+        out.push({ level: dd<0?"red":(dd===0?"amber":"blue"), icon:I.users,
+          title:`Acción pendiente — ${l.nombre}`,
+          desc:`${p?.titulo||""} · ${l.estado}${l.proxNota?` · ${l.proxNota}`:""}. Agendada para el ${fdate(l.proxima)}.`,
+          when: dd<0?`Atrasada ${-dd} ${-dd===1?'día':'días'}`:(dd===0?"Hoy":`En ${dd} ${dd===1?'día':'días'}`), cat:"sales",
+          action:`Agenda.ejecutar(${l.id})`, actionLabel:"Marcar como hecha" });
       }
     }
   });
@@ -461,6 +542,7 @@ const NAV = [
   { id:"contracts", label:"Contratos y cobros", icon:I.contract },
   { sep:"Gestión" },
   { id:"alarms", label:"Alarmas y vencimientos", icon:I.bell },
+  { id:"reports", label:"Tablero de resumen", icon:I.chart },
   { id:"users", label:"Usuarios y permisos", icon:I.users },
 ];
 
@@ -480,25 +562,197 @@ $("#modalBg").addEventListener("click", e => { if (e.target === $("#modalBg")) M
 /* ============================================================
    APP
    ============================================================ */
+/* ============================================================
+   FILTROS DE BÚSQUEDA
+   ============================================================ */
+const Filtros = {
+  // Devuelve las localidades y tipos existentes (para armar los desplegables)
+  opciones(props){
+    const tipos = [...new Set(props.map(p=>p.tipo).filter(Boolean))].sort();
+    const locs  = [...new Set(props.map(p=>p.localidad).filter(Boolean))].sort();
+    return { tipos, locs };
+  },
+
+  /* ---------- Barra de filtros de VENTAS ---------- */
+  barraVentas(props, isViewer){
+    const f = STATE.fSales;
+    const { tipos, locs } = Filtros.opciones(props);
+    const opt = (arr, cur) => `<option value="">Todos</option>` + arr.map(o=>`<option ${cur===o?'selected':''}>${esc(o)}</option>`).join("");
+    return `
+      <div class="filters">
+        <div class="filters-head">
+          <h4>${I.search} Filtros de búsqueda</h4>
+          <button class="btn btn-sm" onclick="Filtros.limpiar('sales')">Limpiar filtros</button>
+        </div>
+        <div class="filters-grid">
+          <div class="fg"><label>Buscar</label>
+            <input id="fs_texto" value="${esc(f.texto)}" placeholder="Título, código, dirección…" oninput="Filtros.aplicar('sales')"></div>
+          <div class="fg"><label>Tipo</label>
+            <select id="fs_tipo" onchange="Filtros.aplicar('sales')">${opt(tipos, f.tipo)}</select></div>
+          <div class="fg"><label>Localidad</label>
+            <select id="fs_localidad" onchange="Filtros.aplicar('sales')">${opt(locs, f.localidad)}</select></div>
+          ${isViewer ? "" : `
+          <div class="fg"><label>Estado</label>
+            <select id="fs_estadoOp" onchange="Filtros.aplicar('sales')">
+              <option value="">Todos</option>
+              <option value="__disp" ${f.estadoOp==="__disp"?'selected':''}>Disponibles (sin vender)</option>
+              ${["Disponible","Reservada","Con seña","Vendida"].map(o=>`<option ${f.estadoOp===o?'selected':''}>${o}</option>`).join("")}
+            </select></div>`}
+          <div class="fg"><label>Moneda</label>
+            <select id="fs_moneda" onchange="Filtros.aplicar('sales')">
+              <option value="">Todas</option>
+              <option ${f.moneda==="USD"?'selected':''}>USD</option>
+              <option ${f.moneda==="ARS"?'selected':''}>ARS</option>
+            </select></div>
+          <div class="fg"><label>Precio desde</label>
+            <input id="fs_precioMin" type="number" value="${esc(f.precioMin)}" placeholder="Mín." oninput="Filtros.aplicar('sales')"></div>
+          <div class="fg"><label>Precio hasta</label>
+            <input id="fs_precioMax" type="number" value="${esc(f.precioMax)}" placeholder="Máx." oninput="Filtros.aplicar('sales')"></div>
+          <div class="fg"><label>Financiación</label>
+            <select id="fs_credito" onchange="Filtros.aplicar('sales')">
+              <option value="">Todas</option>
+              <option value="credito" ${f.credito==="credito"?'selected':''}>Apta crédito</option>
+              <option value="financia" ${f.credito==="financia"?'selected':''}>Acepta financiación</option>
+            </select></div>
+        </div>
+        ${isViewer ? `<div class="hint" style="margin-top:10px">Podés filtrar por rango de precio aunque el valor no se muestre.</div>` : ""}
+      </div>`;
+  },
+
+  /* ---------- Barra de filtros de ALQUILERES ---------- */
+  barraAlquileres(props){
+    const f = STATE.fRentals;
+    const { tipos, locs } = Filtros.opciones(props);
+    const opt = (arr, cur) => `<option value="">Todos</option>` + arr.map(o=>`<option ${cur===o?'selected':''}>${esc(o)}</option>`).join("");
+    return `
+      <div class="filters">
+        <div class="filters-head">
+          <h4>${I.search} Filtros de búsqueda</h4>
+          <button class="btn btn-sm" onclick="Filtros.limpiar('rentals')">Limpiar filtros</button>
+        </div>
+        <div class="filters-grid">
+          <div class="fg"><label>Buscar</label>
+            <input id="fr_texto" value="${esc(f.texto)}" placeholder="Título, código, inquilino…" oninput="Filtros.aplicar('rentals')"></div>
+          <div class="fg"><label>Tipo</label>
+            <select id="fr_tipo" onchange="Filtros.aplicar('rentals')">${opt(tipos, f.tipo)}</select></div>
+          <div class="fg"><label>Localidad</label>
+            <select id="fr_localidad" onchange="Filtros.aplicar('rentals')">${opt(locs, f.localidad)}</select></div>
+          <div class="fg"><label>Situación</label>
+            <select id="fr_contrato" onchange="Filtros.aplicar('rentals')">
+              <option value="">Todas</option>
+              <option value="libre" ${f.contrato==="libre"?'selected':''}>Libres (sin contrato)</option>
+              <option value="ocupada" ${f.contrato==="ocupada"?'selected':''}>Ocupadas (con contrato)</option>
+              <option value="vigente" ${f.contrato==="vigente"?'selected':''}>Contrato vigente</option>
+              <option value="acomenzar" ${f.contrato==="acomenzar"?'selected':''}>Contrato a comenzar</option>
+              <option value="porvencer" ${f.contrato==="porvencer"?'selected':''}>Contrato por vencer (90 días)</option>
+            </select></div>
+          <div class="fg"><label>Alquiler desde</label>
+            <input id="fr_precioMin" type="number" value="${esc(f.precioMin)}" placeholder="Mín." oninput="Filtros.aplicar('rentals')"></div>
+          <div class="fg"><label>Alquiler hasta</label>
+            <input id="fr_precioMax" type="number" value="${esc(f.precioMax)}" placeholder="Máx." oninput="Filtros.aplicar('rentals')"></div>
+        </div>
+      </div>`;
+  },
+
+  /* ---------- Leer los valores y volver a dibujar la tabla ---------- */
+  aplicar(cual){
+    const g = id => document.getElementById(id)?.value ?? "";
+    if (cual==="sales") {
+      STATE.fSales = {
+        texto:g('fs_texto'), tipo:g('fs_tipo'), localidad:g('fs_localidad'),
+        estadoOp:g('fs_estadoOp'), precioMin:g('fs_precioMin'), precioMax:g('fs_precioMax'),
+        moneda:g('fs_moneda'), credito:g('fs_credito'),
+      };
+    } else {
+      STATE.fRentals = {
+        texto:g('fr_texto'), tipo:g('fr_tipo'), localidad:g('fr_localidad'),
+        contrato:g('fr_contrato'), precioMin:g('fr_precioMin'), precioMax:g('fr_precioMax'),
+      };
+    }
+    const cont = document.getElementById('tablaFiltrada');
+    if (cont) cont.innerHTML = (cual==="sales") ? App.tablaVentas() : App.tablaAlquileres();
+  },
+
+  limpiar(cual){
+    if (cual==="sales") STATE.fSales = { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" };
+    else STATE.fRentals = { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" };
+    App.go(STATE.page);
+  },
+
+  /* ---------- Aplicar los filtros a las listas ---------- */
+  filtrarVentas(props){
+    const f = STATE.fSales;
+    const txt = (f.texto||"").toLowerCase().trim();
+    return props.filter(p=>{
+      if (txt) {
+        const campos = [p.titulo, p.codigo, p.direccion, p.localidad, p.tipo].map(x=>String(x||"").toLowerCase()).join(" ");
+        if (!campos.includes(txt)) return false;
+      }
+      if (f.tipo && p.tipo !== f.tipo) return false;
+      if (f.localidad && p.localidad !== f.localidad) return false;
+      if (f.estadoOp) {
+        if (f.estadoOp === "__disp") { if (esVendida(p)) return false; }
+        else if ((p.estadoOp||"") !== f.estadoOp) return false;
+      }
+      if (f.moneda && (p.monedaVenta||"") !== f.moneda) return false;
+      const precio = parseFloat(p.valorVenta)||0;
+      if (f.precioMin && precio < parseFloat(f.precioMin)) return false;
+      if (f.precioMax && precio > parseFloat(f.precioMax)) return false;
+      if (f.credito === "credito" && !p.aptaCredito) return false;
+      if (f.credito === "financia" && !p.aceptaFinanciacion) return false;
+      return true;
+    });
+  },
+
+  filtrarAlquileres(props){
+    const f = STATE.fRentals;
+    const txt = (f.texto||"").toLowerCase().trim();
+    return props.filter(p=>{
+      const c = DB.contracts.find(c=>c.propId===p.id && contratoActivo(c));
+      if (txt) {
+        const campos = [p.titulo, p.codigo, p.direccion, p.localidad, p.tipo, c?.inquilino].map(x=>String(x||"").toLowerCase()).join(" ");
+        if (!campos.includes(txt)) return false;
+      }
+      if (f.tipo && p.tipo !== f.tipo) return false;
+      if (f.localidad && p.localidad !== f.localidad) return false;
+      if (f.contrato) {
+        const est = c ? estadoContrato(c) : null;
+        if (f.contrato === "libre"      && c) return false;
+        if (f.contrato === "ocupada"    && !c) return false;
+        if (f.contrato === "vigente"    && est !== "Vigente") return false;
+        if (f.contrato === "acomenzar"  && est !== "A comenzar") return false;
+        if (f.contrato === "porvencer") {
+          if (!c || !c.fin) return false;
+          const dd = daysBetween(today, c.fin);
+          if (!(dd >= 0 && dd <= 90)) return false;
+        }
+      }
+      const precio = parseFloat(p.valorAlquiler)||0;
+      if (f.precioMin && precio < parseFloat(f.precioMin)) return false;
+      if (f.precioMax && precio > parseFloat(f.precioMax)) return false;
+      return true;
+    });
+  },
+};
+
+/* ============================================================
+   APP
+   ============================================================ */
 const App = {
   // En la versión Firebase el rol lo fija el usuario logueado (no hay selector).
   initFirebase(rol){
     STATE.role = rol;
     const cfg = ROLES[rol] || ROLES.viewer;
-    // datos del usuario en la barra superior
     const tn = document.getElementById('topUserName');
     const tr = document.getElementById('topUserRole');
     if (tn) tn.textContent = STATE.usuario?.nombre || "";
     if (tr) tr.textContent = cfg.name;
-    // datos del usuario en el pie de la barra lateral
     $("#userAv").textContent = (STATE.usuario?.nombre || cfg.name).charAt(0).toUpperCase();
     $("#userName").textContent = STATE.usuario?.nombre || cfg.name;
     $("#userRole").textContent = cfg.name;
-    const allowed = cfg.pages;
-    this.go(allowed[0]);
+    this.go(cfg.pages[0]);
   },
 
-  // setRole se mantiene por compatibilidad interna, sin selector
   setRole(r){
     STATE.role = r;
     const cfg = ROLES[r];
@@ -506,64 +760,61 @@ const App = {
     this.go(allowed.includes(STATE.page) ? STATE.page : allowed[0]);
   },
 
+  go(page){
+    const cfg = ROLES[STATE.role];
+    if (!cfg.pages.includes(page)) page = cfg.pages[0];
+    STATE.page = page;
+    this.renderNav();
+    const item = NAV.find(n=>n.id===page);
+    $("#crumb").innerHTML = `<b>${item?item.label:""}</b>`;
+    const fn = this["render_"+page];
+    $("#content").innerHTML = fn ? fn.call(this) : "";
+    document.getElementById('sidebar')?.classList.remove('open');
+  },
+
   renderNav(){
-    const allowed = ROLES[STATE.role].pages;
-    let lastWasSep = true; let html = "";
-    NAV.forEach(n=>{
-      if (n.sep){ html += `<div class="nav-label">${n.sep}</div>`; return; }
-      if (!allowed.includes(n.id)) return;
+    const cfg = ROLES[STATE.role];
+    let html = "";
+    NAV.forEach((n, i) => {
+      if (n.sep) {
+        // mostrar el separador solo si hay alguna página visible debajo (antes del próximo separador)
+        let hay = false;
+        for (let j=i+1; j<NAV.length && !NAV[j].sep; j++) {
+          if (NAV[j].id && cfg.pages.includes(NAV[j].id)) { hay = true; break; }
+        }
+        if (hay) html += `<div class="nav-sep">${n.sep}</div>`;
+        return;
+      }
+      if (!cfg.pages.includes(n.id)) return;
       html += `<button class="nav-item ${STATE.page===n.id?'active':''}" onclick="App.go('${n.id}')">${n.icon}<span>${n.label}</span></button>`;
     });
     $("#nav").innerHTML = html;
   },
 
-  go(page){
-    STATE.page = page;
-    if (!ROLES[STATE.role].pages.includes(page)) page = ROLES[STATE.role].pages[0], STATE.page = page;
-    this.renderNav();
-    const item = NAV.find(n=>n.id===page);
-    $("#crumb").innerHTML = `<b>${item?item.label:""}</b>`;
-    document.getElementById('sidebar').classList.remove('open');
-    const fn = "render_"+page;
-    $("#content").innerHTML = this[fn] ? this[fn]() : "<p>En construcción</p>";
-  },
-
-  /* ---------- DASHBOARD ---------- */
+  /* ---------- PANEL PRINCIPAL ---------- */
   render_dashboard(){
-    const ventas = DB.properties.filter(p=>p.enVenta);
-    const alquileres = DB.properties.filter(p=>p.enAlquiler);
-    const vigentes = DB.contracts.filter(c=>c.estado==="Vigente");
-    const alarms = computeAlarms();
+    const enVenta = DB.properties.filter(p=>p.enVenta && !esVendida(p)).length;
+    const enAlquiler = DB.properties.filter(p=>p.enAlquiler).length;
     const leadsActivos = DB.leads.filter(l=>l.estado!=="Descartado").length;
+    const alarms = computeAlarms();
+    const vigentes = DB.contracts.filter(c=>estadoContrato(c)==="Vigente");
     return `
       <div class="page-head">
         <div><h2>Panel principal</h2><p>Resumen general de la operación · ${fdate(today)}</p></div>
-        <button class="btn btn-primary" onclick="Prop.form()">${I.plus} Nueva propiedad</button>
       </div>
-      <div class="grid stat-grid">
-        <div class="card stat"><div class="lbl">En venta</div><div class="val brand">${ventas.length}</div><div class="sub">propiedades publicadas</div></div>
-        <div class="card stat"><div class="lbl">En alquiler</div><div class="val brand">${alquileres.length}</div><div class="sub">${vigentes.length} con contrato vigente</div></div>
-        <div class="card stat"><div class="lbl">Interesados activos</div><div class="val">${leadsActivos}</div><div class="sub">en seguimiento</div></div>
-        <div class="card stat"><div class="lbl">Alarmas</div><div class="val" style="color:${alarms.length?'var(--red)':'var(--green)'}">${alarms.length}</div><div class="sub">requieren atención</div></div>
+      <div class="stats">
+        <div class="stat"><div class="lbl">En venta</div><div class="val brand">${enVenta}</div><div class="sub">propiedades publicadas</div></div>
+        <div class="stat"><div class="lbl">En alquiler</div><div class="val brand">${enAlquiler}</div><div class="sub">${vigentes.length} con contrato vigente</div></div>
+        <div class="stat"><div class="lbl">Interesados activos</div><div class="val">${leadsActivos}</div><div class="sub">en seguimiento</div></div>
+        <div class="stat"><div class="lbl">Alarmas</div><div class="val" style="color:${alarms.length?'var(--red)':'var(--green)'}">${alarms.length}</div><div class="sub">${alarms.length?'requieren atención':'todo al día'}</div></div>
       </div>
       <div class="section">
-        <div class="section-head"><h3>Alarmas y vencimientos próximos</h3>
+        <div class="section-head"><h3>Próximos vencimientos y avisos</h3>
           <button class="btn btn-sm" onclick="App.go('alarms')">Ver todas</button></div>
         <div class="card">
-          ${alarms.length ? alarms.slice(0,6).map(a=>App.alarmRow(a)).join("")
-          : `<div class="empty"><div class="ic">${I.bell}</div><h4>Todo al día</h4><p>No hay alarmas activas.</p></div>`}
+          ${alarms.length?alarms.slice(0,6).map(a=>App.alarmRow(a)).join(""):`<div class="empty"><div class="ic">${I.bell}</div><h4>Todo al día</h4><p>No hay alarmas activas.</p></div>`}
         </div>
       </div>`;
-  },
-
-  alarmRow(a){
-    return `<div class="alarm">
-      <div class="alarm-ic ${a.level}">${a.icon}</div>
-      <div class="alarm-body"><div class="t">${a.title}</div><div class="d">${a.desc}</div>
-        ${a.action?`<button class="btn btn-sm" style="margin-top:8px" onclick="${a.action}">${I.tools} Registrar cambio realizado</button>`:""}
-      </div>
-      <div class="alarm-time">${a.when}</div>
-    </div>`;
   },
 
   /* ---------- MAESTRO DE PROPIEDADES ---------- */
@@ -610,19 +861,34 @@ const App = {
       </div>`;
     const notice = isViewer?`<div class="notice">${I.eye}<div>Vista <b>Visor (colega)</b>: solo lectura, solo propiedades habilitadas, sin propietario, comisión ni interesados.</div></div>`:"";
     if (!ventas.length) return head+notice+App.emptyState("Sin propiedades en venta", isViewer?"No hay propiedades habilitadas para mostrar.":"Marcá una propiedad como 'en venta'.", (isViewer||!can())?null:"Nueva propiedad", "Prop.form(null,'venta')");
-    return head+notice+`
+    return head + notice
+      + Filtros.barraVentas(ventas, isViewer)
+      + `<div id="tablaFiltrada">${App.tablaVentas()}</div>`;
+  },
+
+  // Tabla de ventas (se vuelve a dibujar sola al filtrar)
+  tablaVentas(){
+    const isViewer = STATE.role==="viewer";
+    let ventas = DB.properties.filter(p=>p.enVenta);
+    if (isViewer) ventas = ventas.filter(p=>p.visibleColegas);
+    const total = ventas.length;
+    ventas = Filtros.filtrarVentas(ventas);
+    const contador = `<div class="filter-count" style="margin-bottom:10px">Mostrando <b>${ventas.length}</b> de ${total} propiedades</div>`;
+    if (!ventas.length) return contador + App.emptyState("Sin resultados","Ninguna propiedad coincide con los filtros. Probá ampliarlos.",null,null);
+    return contador + `
       <div class="table-wrap"><table>
         <thead><tr>${isViewer?"":"<th>Código</th>"}<th>Propiedad</th><th>Valor</th>
           ${isViewer?"":"<th>Propietario</th><th>Comisión</th><th>Estado</th><th>Interesados</th><th>Publicada</th>"}
-          <th>Financiación</th><th>Drive</th><th></th></tr></thead>
+          <th>Financiación</th>${USAR_STORAGE?"<th>Docs</th>":""}<th>Drive</th><th></th></tr></thead>
         <tbody>
           ${ventas.map(p=>{
             const leads = DB.leads.filter(l=>l.propId===p.id);
             const ant = p.fechaPub?daysBetween(p.fechaPub,today):null;
-            const vc = k => !isViewer || App.visorVe(p,k); // admin ve todo; visor según config
+            const vc = k => !isViewer || App.visorVe(p,k);
             const finBadges = vc('financiacion') ? `${p.aptaCredito?'<span class="badge blue" style="margin-right:4px">Apta crédito</span>':''}${p.aceptaFinanciacion?'<span class="badge green">Financia</span>':''}${(!p.aptaCredito&&!p.aceptaFinanciacion)?'<span class="t-muted">—</span>':''}` : '<span class="t-muted">—</span>';
             const ubic = isViewer ? esc(p.localidad||"—") : esc(p.direccion);
             const comMonto = (p.comision && p.valorVenta) ? fmt(Math.round(p.valorVenta*p.comision/100), p.monedaVenta) : null;
+            const nDocs = (p.docs||[]).length;
             return `<tr class="${esVendida(p)?'sold':''}">
               ${isViewer?"":`<td><span class="code-tag">${esc(p.codigo||"—")}</span></td>`}
               <td><div class="t-strong">${esc(p.titulo)}</div><div class="t-muted">${ubic}</div></td>
@@ -634,6 +900,9 @@ const App = {
                 <td><button class="btn btn-sm" onclick="Lead.list(${p.id})">${leads.length} ${leads.length===1?'interesado':'interesados'}</button></td>
                 <td>${ant!=null?ant+" días":"—"}</td>`}
               <td>${finBadges}</td>
+              ${USAR_STORAGE?`<td>${isViewer
+                    ? (nDocs?`<span class="badge gray">${nDocs}</span>`:'<span class="t-muted">—</span>')
+                    : `<button class="btn btn-sm" onclick="Docs.list(${p.id})">${I.file} ${nDocs}</button>`}</td>`:""}
               <td><a class="drive-link" href="${esc(p.drive)}" target="_blank">${I.drive} ${isViewer?'Ver carpeta':'Abrir'}</a></td>
               <td><div class="row-actions">
                 <button class="icon-btn" title="Ver" onclick="Prop.view(${p.id})">${I.eye}</button>
@@ -649,24 +918,45 @@ const App = {
   /* ---------- ALQUILERES ---------- */
   render_rentals(){
     const alquileres = DB.properties.filter(p=>p.enAlquiler);
-    return `
+    const head = `
       <div class="page-head">
-        <div><h2>Alquileres</h2><p>Propiedades en alquiler, valores y forma de actualización.</p></div>
+        <div><h2>Alquileres</h2><p>Propiedades en alquiler, contratos y vigencias.</p></div>
         <button class="btn btn-primary" onclick="Prop.form(null,'alquiler')">${I.plus} Nueva propiedad en alquiler</button>
-      </div>
-      ${alquileres.length?`
+      </div>`;
+    if (!alquileres.length) return head + App.emptyState("Sin propiedades en alquiler","Marcá una propiedad como 'en alquiler'.","Nueva propiedad","Prop.form(null,'alquiler')");
+    return head
+      + Filtros.barraAlquileres(alquileres)
+      + `<div id="tablaFiltrada">${App.tablaAlquileres()}</div>`;
+  },
+
+  // Tabla de alquileres (se vuelve a dibujar sola al filtrar)
+  tablaAlquileres(){
+    let alquileres = DB.properties.filter(p=>p.enAlquiler);
+    const total = alquileres.length;
+    alquileres = Filtros.filtrarAlquileres(alquileres);
+    const contador = `<div class="filter-count" style="margin-bottom:10px">Mostrando <b>${alquileres.length}</b> de ${total} propiedades</div>`;
+    if (!alquileres.length) return contador + App.emptyState("Sin resultados","Ninguna propiedad coincide con los filtros. Probá ampliarlos.",null,null);
+    return contador + `
       <div class="table-wrap"><table>
-        <thead><tr><th>Código</th><th>Propiedad</th><th>Valor alquiler</th><th>Actualización</th><th>Agua cal.</th><th>Contrato</th><th>Drive</th><th></th></tr></thead>
+        <thead><tr><th>Código</th><th>Propiedad</th><th>Valor alquiler</th><th>Contrato</th><th>Vigencia</th><th>Actualización</th><th>Agua cal.</th><th>Drive</th><th></th></tr></thead>
         <tbody>
           ${alquileres.map(p=>{
-            const c = DB.contracts.find(c=>c.propId===p.id);
+            const c = DB.contracts.find(c=>c.propId===p.id && contratoActivo(c))
+                   || DB.contracts.find(c=>c.propId===p.id);
+            const est = c ? estadoContrato(c) : null;
+            const diasFin = (c && c.fin) ? daysBetween(today, c.fin) : null;
             return `<tr>
               <td><span class="code-tag">${esc(p.codigo||"—")}</span></td>
-              <td><div class="t-strong">${esc(p.titulo)}</div><div class="t-muted">${esc(p.direccion)}</div></td>
+              <td><div class="t-strong">${esc(p.titulo)}</div><div class="t-muted">${esc(p.direccion)}</div>
+                  ${c?`<div class="t-muted">Inquilino: ${esc(c.inquilino||"—")}</div>`:""}</td>
               <td class="t-strong">${fmt(p.valorAlquiler,p.monedaAlquiler)}<div class="t-muted">por mes</div></td>
-              <td>cada ${p.actualizaCada} meses<div class="t-muted">índice ${esc(p.indice||"—")}</div></td>
+              <td>${c?App.contractBadge(est):'<span class="badge gray">Sin contrato</span>'}</td>
+              <td>${c && c.inicio
+                    ? `<div>${fdate(c.inicio)}</div><div class="t-muted">al ${fdate(c.fin)}</div>
+                       ${(diasFin!=null && diasFin>=0 && diasFin<=90 && est==="Vigente")?`<div class="t-muted" style="color:var(--amber)">vence en ${diasFin} días</div>`:""}`
+                    : '<span class="t-muted">—</span>'}</td>
+              <td>cada ${p.actualizaCada||"—"} meses<div class="t-muted">índice ${esc(p.indice||"—")}</div></td>
               <td>${p.aguaCaliente?`${p.aguaCaliente==="Termotanque"?I.flame:""} ${esc(p.aguaCaliente)}`:"—"}</td>
-              <td>${c?App.contractBadge(c.estado):'<span class="badge gray">Sin contrato</span>'}</td>
               <td><a class="drive-link" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir</a></td>
               <td><div class="row-actions">
                 <button class="icon-btn" title="Ver" onclick="Prop.view(${p.id})">${I.eye}</button>
@@ -675,8 +965,7 @@ const App = {
             </tr>`;
           }).join("")}
         </tbody>
-      </table></div>`:App.emptyState("Sin propiedades en alquiler","Marcá una propiedad como 'en alquiler'.","Nueva propiedad","Prop.form(null,'alquiler')")}
-    `;
+      </table></div>`;
   },
 
   /* ---------- CONTRATOS ---------- */
@@ -698,9 +987,13 @@ const App = {
               <td>${fdate(c.inicio)}<div class="t-muted">al ${fdate(c.fin)}</div></td>
               <td class="t-strong">${fmt(c.valor,c.moneda)}</td>
               <td>cada ${c.actualizaCada}m · ${esc(c.indice)}<div class="t-muted">próx. ${fdate(c.proxActualiz)}</div></td>
-              <td>${App.contractBadge(c.estado)}</td>
+              <td>${App.contractBadge(estadoContrato(c))}</td>
               <td>${pend?`<span class="badge red"><span class="dot"></span>${pend} pend.</span>`:'<span class="badge green"><span class="dot"></span>Al día</span>'}</td>
-              <td><button class="icon-btn" title="Ver" onclick="Contract.view(${c.id})">${I.eye}</button></td>
+              <td><div class="row-actions">
+                <button class="icon-btn" title="Ver" onclick="Contract.view(${c.id})">${I.eye}</button>
+                ${can()?`<button class="icon-btn" title="Editar" onclick="Contract.form(${c.id})">${I.edit}</button>`:""}
+                ${(STATE.role==="admin")?`<button class="icon-btn" title="Eliminar contrato" onclick="Contract.eliminar(${c.id})">${I.trash}</button>`:""}
+              </div></td>
             </tr>`;
           }).join("")}
         </tbody>
@@ -718,6 +1011,11 @@ const App = {
       </div>`;
   },
 
+  /* ---------- TABLERO DE RESUMEN ---------- */
+  render_reports(){
+    return Reportes.render();
+  },
+
   /* ---------- USUARIOS ---------- */
   render_users(){
     return `
@@ -725,18 +1023,35 @@ const App = {
       <div class="table-wrap"><table>
         <thead><tr><th>Usuario</th><th>Perfil</th><th>Acceso</th><th>Permisos</th><th>Estado</th></tr></thead>
         <tbody>
-          <tr><td class="t-strong">Administrador 1</td><td><span class="badge blue">Acceso total</span></td><td>Ambos portales y todos los datos</td><td>Ver y editar</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
-          <tr><td class="t-strong">Administrador 2</td><td><span class="badge blue">Acceso total</span></td><td>Ambos portales y todos los datos</td><td>Ver y editar</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
-          <tr><td class="t-strong">Usuario ventas</td><td><span class="badge amber">Solo ventas</span></td><td>Únicamente el módulo de Ventas</td><td>Ver y editar (en Ventas)</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
-          <tr><td class="t-strong">Usuario alquileres</td><td><span class="badge amber">Solo alquileres</span></td><td>Alquileres, contratos y alarmas</td><td>Ver y editar (en Alquileres)</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
-          <tr><td class="t-strong">Colega externo</td><td><span class="badge gray">Visor</span></td><td>Solo Ventas · propiedades habilitadas</td><td>Solo lectura</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
+          <tr><td class="t-strong">GerenciaAJ</td><td><span class="badge blue">Acceso total</span></td><td>Ambos portales y todos los datos</td><td>Ver y editar</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
+          <tr><td class="t-strong">(otros admin)</td><td><span class="badge blue">Acceso total</span></td><td>Ambos portales y todos los datos</td><td>Ver y editar</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
+          <tr><td class="t-strong">VentasAJ</td><td><span class="badge amber">Solo ventas</span></td><td>Únicamente el módulo de Ventas</td><td>Ver y editar (en Ventas)</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
+          <tr><td class="t-strong">AlquileresAJ</td><td><span class="badge amber">Solo alquileres</span></td><td>Alquileres, contratos y alarmas</td><td>Ver y editar (en Alquileres)</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
+          <tr><td class="t-strong">ColegaAJ</td><td><span class="badge gray">Visor</span></td><td>Solo Ventas · propiedades habilitadas</td><td>Solo lectura</td><td><span class="badge green"><span class="dot"></span>Activo</span></td></tr>
         </tbody>
       </table></div>
-      <div class="notice" style="margin-top:20px">${I.info}<div>Probá los perfiles desde el selector <b>"Ver como"</b> arriba a la derecha. En esta versión de prototipo los perfiles son demostrativos: el login real con contraseña y los datos compartidos entre usuarios requieren la versión con servidor (producción).</div></div>
+      <div class="notice" style="margin-top:20px">${I.info}<div>Las cuentas se administran desde la consola de Firebase: ahí se crean los usuarios, se les asigna el perfil y se restablecen las contraseñas.</div></div>
     `;
   },
 
   /* ---------- Helpers UI ---------- */
+  alarmRow(a){
+    const colores = { red:"var(--red)", amber:"var(--amber)", blue:"var(--brand)", green:"var(--green)" };
+    const col = colores[a.level] || "var(--ink-soft)";
+    return `
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)">
+        <div style="color:${col};flex-shrink:0;margin-top:2px">${a.icon||I.bell}</div>
+        <div style="flex:1;min-width:0">
+          <div class="t-strong">${a.title}</div>
+          <div class="t-muted" style="margin-top:2px">${a.desc||""}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <span class="badge ${a.level==='red'?'red':(a.level==='amber'?'amber':'blue')}"><span class="dot"></span>${a.when||""}</span>
+          ${a.action?`<button class="btn btn-sm btn-primary" onclick="${a.action}">${a.actionLabel||"Registrar"}</button>`:""}
+        </div>
+      </div>`;
+  },
+
   emptyState(title,desc,btnLabel,btnAction){
     return `<div class="card"><div class="empty">
       <div class="ic">${I.empty}</div><h4>${title}</h4><p>${desc}</p>
@@ -745,7 +1060,7 @@ const App = {
   },
   opBadge(s){ const m={"Disponible":"green","Reservada":"amber","Con seña":"amber","Vendida":"gray"}; return `<span class="badge ${m[s]||'gray'}"><span class="dot"></span>${s||"—"}</span>`; },
   visorVe(p,k){ const vc=p.visorCampos; return vc==null ? true : !!vc[k]; },
-  contractBadge(s){ const m={"Vigente":"green","Por vencer":"amber","Finalizado":"gray","Rescindido":"red"}; return `<span class="badge ${m[s]||'gray'}"><span class="dot"></span>${s||"—"}</span>`; },
+  contractBadge(s){ const m={"Vigente":"green","A comenzar":"blue","Por vencer":"amber","Finalizado":"gray","Rescindido":"red"}; return `<span class="badge ${m[s]||'gray'}"><span class="dot"></span>${s||"—"}</span>`; },
 };
 /* ============================================================
    PROPIEDADES
@@ -800,8 +1115,15 @@ const Prop = {
             <label><input type="checkbox" id="f_cocina" ${ck('cocina')}> Cocina</label>
             <label><input type="checkbox" id="f_lavadero" ${ck('lavadero')}> Lavadero</label>
             <label><input type="checkbox" id="f_balcon" ${ck('balcon')}> Balcón</label>
-            <label><input type="checkbox" id="f_amoblado" ${ck('amoblado')}> Amoblado</label>
+            <label><input type="checkbox" id="f_amoblado" ${ck('amoblado')} onchange="Prop.toggleAmoblado()"> Amoblado</label>
           </div>
+        </div>
+        <div id="sec_amoblado" style="margin-top:4px">
+          <div class="form-row one"><div class="field">
+            <label>¿Qué muebles / equipamiento tiene?</label>
+            <textarea id="f_obsAmoblado" rows="2" placeholder="Ej: heladera, cocina, juego de living, 2 camas, aire acondicionado en dormitorio principal">${esc(v('obsAmoblado'))}</textarea>
+            <div class="hint">Detallá lo que queda en la propiedad.</div>
+          </div></div>
         </div>
       </div>
 
@@ -836,7 +1158,7 @@ const Prop = {
         </div>
         <div class="form-row one" id="sec_varilla">
           <div class="field"><label>Fecha del último cambio de varilla (termotanque)</label>
-            <input id="f_ultCambioVarilla" type="date" value="${esc(v('ultCambioVarilla'))}">
+            <input id="f_ultCambioVarilla" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('ultCambioVarilla'))}">
             <div class="hint">${I.flame} El sistema le recordará al inquilino el cambio cada 8 meses contando desde esta fecha. Al registrar un cambio, el ciclo se reinicia.</div>
           </div>
         </div>
@@ -901,7 +1223,7 @@ const Prop = {
           <div class="field"><label>Estado de la operación</label><select id="f_estadoOp">
             ${["Disponible","Reservada","Con seña","Vendida"].map(o=>`<option ${sel('estadoOp',o)}>${o}</option>`).join("")}
           </select></div>
-          <div class="field"><label>Fecha de publicación</label><input id="f_fechaPub" type="date" value="${esc(v('fechaPub',today))}"></div>
+          <div class="field"><label>Fecha de publicación</label><input id="f_fechaPub" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fechaPub',today))}"></div>
         </div>
         <div class="field" style="margin-bottom:12px"><label>Financiación</label>
           <div class="checkbox-grid" style="grid-template-columns:1fr 1fr">
@@ -937,7 +1259,7 @@ const Prop = {
     // estado inicial de los bloques condicionales
     if (foco==='venta') document.getElementById('f_enVenta').value="1";
     if (foco==='alquiler') document.getElementById('f_enAlquiler').value="1";
-    Prop.toggleTipo(); Prop.toggleAgua(); Prop.toggleOp(); Prop.toggleVisor(); Prop.calcComision();
+    Prop.toggleTipo(); Prop.toggleAgua(); Prop.toggleOp(); Prop.toggleVisor(); Prop.calcComision(); Prop.toggleAmoblado();
   },
 
   toggleTipo(){
@@ -957,6 +1279,16 @@ const Prop = {
     // Año y estado: no van en Campo ni Terreno
     if (anioEstado) anioEstado.style.display = (esCampo||esTerreno) ? "none" : "";
     Prop.toggleAguaSec();
+    Prop.toggleAmoblado();
+  },
+  toggleAmoblado(){
+    const cb = document.getElementById('f_amoblado');
+    const sec = document.getElementById('sec_amoblado');
+    const secViv = document.getElementById('sec_vivienda');
+    if (!cb || !sec) return;
+    // solo se muestra si es vivienda Y está tildado amoblado
+    const esViv = secViv && secViv.style.display !== "none";
+    sec.style.display = (esViv && cb.checked) ? "" : "none";
   },
   calcComision(){
     const precio = parseFloat(document.getElementById('f_valorVenta')?.value)||0;
@@ -985,6 +1317,7 @@ const Prop = {
     const p = prop(id);
     if (!confirm(`¿Marcar "${p.titulo}" como VENDIDA? Quedará resaltada en rojo.`)) return;
     p.estadoOp = "Vendida";
+    p.fechaVenta = today;   // queda registrada para el tablero de resumen
     persist('properties', p);
     App.go(STATE.page);
   },
@@ -1045,6 +1378,7 @@ const Prop = {
         ambientes:num('ambientes'), dorm:num('dorm'), banos:num('banos'), cochera:g('cochera'),
         patio:gc('patio'), living:gc('living'), cocina:gc('cocina'), lavadero:gc('lavadero'),
         balcon:gc('balcon'), amoblado:gc('amoblado'),
+        obsAmoblado: gc('amoblado') ? g('obsAmoblado') : "",
       });
       // El agua caliente / termotanque solo aplica a viviendas en alquiler
       if (enAlquiler) {
@@ -1121,6 +1455,7 @@ const Prop = {
     if (isVivienda(p.tipo)) {
       const comod = [p.patio&&"Patio/jardín",p.living&&"Living",p.cocina&&"Cocina",p.lavadero&&"Lavadero",p.balcon&&"Balcón",p.amoblado&&"Amoblado"].filter(Boolean).join(", ")||"—";
       g.push(item("Comodidades",comod));
+      if (p.amoblado && p.obsAmoblado) g.push(item("Equipamiento", esc(p.obsAmoblado)));
       if (p.enAlquiler && !isViewer) g.push(item("Agua caliente",esc(p.aguaCaliente||"—")));
     }
     if (p.tipo==="Campo") {
@@ -1173,7 +1508,15 @@ const Prop = {
     if (p.enAlquiler) html += `<div class="section"><div class="section-head"><h3>Alquiler</h3></div><div class="detail-grid">
       ${item("Valor mensual",fmt(p.valorAlquiler,p.monedaAlquiler))}
       ${item("Actualización",`cada ${p.actualizaCada} meses · ${esc(p.indice||"—")}`)}</div></div>`;
-    html += `<div class="section"><a class="btn btn-primary" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir carpeta de Drive</a></div>`;
+    html += `<div class="section">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-primary" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir carpeta de Drive</a>
+        ${(USAR_STORAGE && p.enVenta)?`<button class="btn" onclick="Docs.list(${p.id})">${I.file} Documentos (${(p.docs||[]).length})</button>`:""}
+      </div>
+      <div class="hint" style="margin-top:8px">${USAR_STORAGE
+        ? "Las fotos y planos están en Drive. Los documentos se adjuntan al sistema."
+        : `Ahí están las fotos, los planos y los documentos${p.codigo?` (carpeta ${esc(p.codigo)})`:""}.`}</div>
+    </div>`;
     Modal.open(p.titulo, html);
   },
 };
@@ -1209,7 +1552,19 @@ const Lead = {
           </div>
         </div>
         <div style="margin-top:8px;font-size:13px;color:var(--ink-soft)">${esc(l.nota||"")}</div>
-        <div style="margin-top:8px;font-size:12px;color:var(--ink-soft)">Último contacto: ${fdate(l.fecha)} · Próxima acción: ${fdate(l.proxima)}</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink-soft)">Último contacto: ${fdate(l.fecha)}</div>
+        ${(l.proxima && !l.accionHecha) ? (()=>{
+          const dd = daysBetween(today, l.proxima);
+          const col = dd<0 ? "var(--red)" : (dd===0 ? "var(--amber)" : "var(--brand)");
+          const txt = dd<0 ? `Atrasada ${-dd} ${-dd===1?'día':'días'}` : (dd===0?"Para hoy":`En ${dd} ${dd===1?'día':'días'}`);
+          return `<div style="margin-top:10px;padding:9px 11px;background:var(--brand-soft);border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="font-size:12.5px">
+              <b style="color:${col}">Acción pendiente · ${txt}</b>
+              <div class="t-muted">${fdate(l.proxima)}${l.proxNota?` — ${esc(l.proxNota)}`:""}</div>
+            </div>
+            ${can()?`<button class="btn btn-sm btn-primary" onclick="Agenda.ejecutar(${l.id})">${I.check} Marcar como hecha</button>`:""}
+          </div>`;
+        })() : `<div style="margin-top:6px;font-size:12px;color:var(--ink-soft)">Sin acciones pendientes</div>`}
       </div>`).join(""):`<div class="empty" style="padding:30px"><h4>Sin interesados</h4><p>Todavía no hay interesados registrados.</p></div>`;
     Modal.open(`Interesados — ${p?.titulo||""}`, body,
       `<button class="btn" onclick="Modal.close()">Cerrar</button>${can()?`<button class="btn btn-primary" onclick="Lead.form(${propId})">${I.plus} Registrar interesado</button>`:""}`);
@@ -1223,9 +1578,18 @@ const Lead = {
         <div class="field"><label>Contacto</label><input id="l_contacto" value="${esc(v('contacto'))}" placeholder="Teléfono o email"></div></div>
       <div class="form-row"><div class="field"><label>Origen</label><select id="l_origen">${opt(["Cartel","Referido","Portal web","Redes","Llamado","Otro"], v('origen'))}</select></div>
         <div class="field"><label>Estado</label><select id="l_estado">${opt(["Nuevo","Contactado","Visita agendada","Negociando","Descartado"], v('estado'))}</select></div></div>
-      <div class="form-row"><div class="field"><label>Fecha de contacto</label><input id="l_fecha" type="date" value="${esc(v('fecha',today))}"></div>
-        <div class="field"><label>Próxima acción</label><input id="l_proxima" type="date" value="${esc(v('proxima'))}"></div></div>
-      <div class="form-row one"><div class="field"><label>Nota / seguimiento / observaciones</label><textarea id="l_nota" rows="3">${esc(v('nota'))}</textarea></div></div>
+      <div class="form-row"><div class="field"><label>Fecha de contacto</label><input id="l_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fecha',today))}"></div>
+        <div class="field"><label>Próxima acción (fecha)</label><input id="l_proxima" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('proxima'))}">
+          <div class="hint">Aparece en Alarmas hasta que la marques como hecha.</div></div></div>
+      <div class="form-row one"><div class="field"><label>¿Qué hay que hacer?</label><input id="l_proxNota" value="${esc(v('proxNota'))}" placeholder="Ej: llamarlo para coordinar la visita"></div></div>
+      <div class="form-row one"><div class="field"><label>Nota / observaciones</label><textarea id="l_nota" rows="3">${esc(v('nota'))}</textarea></div></div>
+      ${(leadId && l.historial && l.historial.length)?`
+        <div class="form-section">
+          <h4>${I.cal} Historial de contactos</h4>
+          <ul class="timeline">
+            ${l.historial.map(h=>`<li><b>${fdate(h.fecha)}</b> — ${esc(h.resultado||h.accion||"Contacto")}${h.estadoHasta&&h.estadoDesde!==h.estadoHasta?` <span class="t-muted">(${esc(h.estadoDesde)} → ${esc(h.estadoHasta)})</span>`:""}</li>`).join("")}
+          </ul>
+        </div>`:""}
     `, `<button class="btn" onclick="Lead.list(${propId})">Volver</button><button class="btn btn-primary" onclick="Lead.save(${propId},${leadId||'null'})">${leadId?'Guardar cambios':'Guardar'}</button>`);
   },
   save(propId, leadId){
@@ -1233,12 +1597,17 @@ const Lead = {
     if (!g('nombre')) { alert("Poné el nombre del interesado."); return; }
     if (leadId) {
       const l = DB.leads.find(x=>x.id===leadId);
+      const proxCambio = l.proxima !== g('proxima');
       Object.assign(l, { nombre:g('nombre'), contacto:g('contacto'), origen:g('origen'),
-        estado:g('estado'), fecha:g('fecha'), proxima:g('proxima'), nota:g('nota') });
+        estado:g('estado'), fecha:g('fecha'), proxima:g('proxima')||null, proxNota:g('proxNota'), nota:g('nota') });
+      // si se agenda una acción nueva (o se cambia la fecha), vuelve a quedar pendiente
+      if (proxCambio && g('proxima')) l.accionHecha = false;
+      if (!g('proxima')) l.accionHecha = true;
       persist('leads', l);
     } else {
       const nuevo = { id:DB.nextId.leads++, propId, nombre:g('nombre'), contacto:g('contacto'),
-        origen:g('origen'), estado:g('estado'), fecha:g('fecha'), proxima:g('proxima'), nota:g('nota') };
+        origen:g('origen'), estado:g('estado'), fecha:g('fecha'), proxima:g('proxima')||null,
+        proxNota:g('proxNota'), nota:g('nota'), accionHecha:false, historial:[], creado:today };
       DB.leads.push(nuevo);
       persist('leads', nuevo);
       persistMeta();
@@ -1252,6 +1621,41 @@ const Lead = {
    CONTRATOS Y COBROS
    ============================================================ */
 const Contract = {
+  // Calcula la fecha de fin a partir del inicio + duración en meses.
+  // El fin queda editable: si la persona lo cambia a mano, se respeta.
+  calcFin(){
+    const ini = document.getElementById('c_inicio')?.value;
+    const dur = parseInt(document.getElementById('c_duracion')?.value)||0;
+    const finInput = document.getElementById('c_fin');
+    if (!ini || dur<=0 || !finInput) return;
+    // el fin es el día anterior a cumplir los N meses (ej: 01/01/2026 + 24m => 31/12/2027)
+    const finCalc = addMonths(ini, dur);
+    const d = new Date(finCalc+"T12:00:00");
+    d.setDate(d.getDate()-1);
+    finInput.value = isoDate(d);
+  },
+
+  async eliminar(id){
+    if (STATE.role!=="admin") { alert("Solo el perfil Acceso total puede eliminar contratos."); return; }
+    const c = DB.contracts.find(c=>c.id===id);
+    if (!c) return;
+    const p = prop(c.propId);
+    const nCuotas = (c.cuotas||[]).length;
+    const nDocs = (c.docs||[]).length;
+    let msg = `¿Eliminar el contrato de ${c.inquilino}${p?` (${p.titulo})`:""}?\n\nEsta acción no se puede deshacer.`;
+    if (nCuotas) msg += `\n\nSe van a borrar también ${nCuotas} ${nCuotas===1?'cuota registrada':'cuotas registradas'} con sus cobros.`;
+    if (nDocs) msg += `\nY ${nDocs} ${nDocs===1?'documento adjunto':'documentos adjuntos'}.`;
+    if (!confirm(msg)) return;
+    // borrar los documentos de la nube (solo si Storage está activo)
+    if (USAR_STORAGE && fbStorage) {
+      for (const d of (c.docs||[])) {
+        if (d.ruta) { try { await fbStorage.ref(d.ruta).delete(); } catch(e){ /* si ya no está, seguimos */ } }
+      }
+    }
+    await persistDelete('contracts', id);
+    DB.contracts = DB.contracts.filter(x=>x.id!==id);
+    App.go('contracts');
+  },
   form(id, propId){
     const alqProps = DB.properties.filter(p=>p.enAlquiler);
     if (!alqProps.length) { alert("Primero marcá alguna propiedad como 'en alquiler'."); return; }
@@ -1266,8 +1670,15 @@ const Contract = {
       <div class="form-row"><div class="field"><label>Inquilino</label><input id="c_inquilino" value="${esc(v('inquilino'))}"></div>
         <div class="field"><label>Garante 1</label><input id="c_garante" value="${esc(v('garante'))}"></div></div>
       <div class="form-row one"><div class="field"><label>Garante 2 (opcional)</label><input id="c_garante2" value="${esc(v('garante2'))}"></div></div>
-      <div class="form-row"><div class="field"><label>Inicio</label><input id="c_inicio" type="date" value="${esc(v('inicio'))}"></div>
-        <div class="field"><label>Fin</label><input id="c_fin" type="date" value="${esc(v('fin'))}"></div></div>
+      <div class="form-row">
+        <div class="field"><label>Inicio</label><input id="c_inicio" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('inicio'))}" onchange="Contract.calcFin()"></div>
+        <div class="field"><label>Duración (meses)</label><input id="c_duracion" type="number" min="1" value="${esc(v('duracion',24))}" onchange="Contract.calcFin()" oninput="Contract.calcFin()">
+          <div class="hint">Al cargarla, la fecha de fin se calcula sola.</div></div>
+      </div>
+      <div class="form-row one">
+        <div class="field"><label>Fin</label><input id="c_fin" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fin'))}">
+          <div class="hint">Se calcula automáticamente, pero podés modificarla a mano si hace falta.</div></div>
+      </div>
       <div class="form-row"><div class="field"><label>Valor mensual</label><input id="c_valor" type="number" value="${esc(v('valor'))}"></div>
         <div class="field"><label>Moneda</label><select id="c_moneda"><option ${optSel(v('moneda','ARS'),'ARS')}>ARS</option><option ${optSel(v('moneda'),'USD')}>USD</option></select></div></div>
       <div class="form-row"><div class="field"><label>Actualiza cada (meses)</label><input id="c_cada" type="number" value="${esc(v('actualizaCada',3))}"></div>
@@ -1275,36 +1686,30 @@ const Contract = {
       <div class="form-row"><div class="field"><label>Comisión (monto total)</label><input id="c_deposito" type="number" value="${esc(v('deposito'))}">
           <div class="hint">Equivale a un mes de alquiler. El cobro (en una o varias cuotas) se registra dentro del contrato.</div></div>
         <div class="field"><label>Tipo de garantía</label><select id="c_garantia">${["Recibo de sueldo","Garantía propietaria","Seguro de caución"].map(o=>`<option ${optSel(v('garantia'),o)}>${o}</option>`).join("")}</select></div></div>
-      ${id?`<div class="form-row"><div class="field"><label>Próxima actualización</label><input id="c_prox" type="date" value="${esc(v('proxActualiz'))}"></div>
-        <div class="field"><label>Estado del contrato</label><select id="c_estado">${["Vigente","Por vencer","Finalizado","Rescindido"].map(o=>`<option ${optSel(v('estado'),o)}>${o}</option>`).join("")}</select></div></div>`:''}
-      <div class="form-section" style="margin-top:4px">
-        <h4>${I.pdf} Contrato firmado</h4>
-        <div class="file-drop ${v('pdfNombre')?'has-file':''}" id="c_drop" onclick="document.getElementById('c_pdf').click()">
-          <div class="file-row">${I.pdf} <span id="c_pdfLabel">${v('pdfNombre')?'✓ '+esc(v('pdfNombre')):'Subir contrato escaneado (PDF)'}</span></div>
-        </div>
-        <input type="file" id="c_pdf" accept="application/pdf" style="display:none" onchange="Contract.onPdf()">
-        <div class="hint" style="margin-top:8px">${v('pdfNombre')?'Ya hay un PDF adjunto. Podés reemplazarlo subiendo otro.':'Adjuntá el contrato firmado escaneado.'} En el prototipo el archivo no se almacena; se muestra el nombre como demostración.</div>
-      </div>
+      ${id?`<div class="form-row"><div class="field"><label>Próxima actualización</label><input id="c_prox" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('proxActualiz'))}"></div>
+        <div class="field"><label>Estado del contrato</label><select id="c_estado">${["Automático","Finalizado","Rescindido"].map(o=>`<option ${optSel(v('estado'),o)}>${o}</option>`).join("")}</select>
+          <div class="hint">Dejalo en "Automático": el sistema pone "A comenzar", "Vigente" o "Finalizado" según las fechas. Usá los otros solo para cerrar un contrato antes de tiempo.</div></div></div>`:''}
+      ${USAR_STORAGE
+        ? (id?`<div class="form-section" style="margin-top:4px">
+            <h4>${I.file} Documentos</h4>
+            <div class="hint" style="margin-bottom:10px">El contrato firmado y los demás documentos se adjuntan desde la ficha del contrato, y quedan guardados en la nube.</div>
+            <button class="btn btn-sm" onclick="Docs.listContrato(${id})">${I.file} Ver / adjuntar documentos</button>
+          </div>`:`<div class="notice">${I.info}<div>Una vez creado el contrato, vas a poder adjuntarle el contrato firmado y otros documentos.</div></div>`)
+        : `<div class="notice">${I.drive}<div>El contrato firmado y los demás documentos se guardan en la <b>carpeta de Drive de la propiedad</b>, junto con las fotos.</div></div>`}
     `, `<button class="btn" onclick="${id?`Contract.view(${id})`:'Modal.close()'}">Cancelar</button><button class="btn btn-primary" onclick="Contract.save(${id||'null'})">${id?'Guardar cambios':'Crear contrato'}</button>`);
-    // preservar nombre de PDF existente si no se cambia
-    if (id && c.pdfNombre) document.getElementById('c_drop')._name = c.pdfNombre;
-  },
-  onPdf(){
-    const f = document.getElementById('c_pdf').files[0];
-    if (f) { const d=document.getElementById('c_drop'); d.classList.add('has-file');
-      document.getElementById('c_pdfLabel').textContent = "✓ "+f.name; d._name=f.name; }
   },
   save(id){
     const g = k=>{ const el=document.getElementById('c_'+k); return el?el.value:""; };
     if (!g('inquilino')) { alert("Poné el nombre del inquilino."); return; }
-    const pdfName = document.getElementById('c_drop')._name || null;
     if (id) {
       const c = DB.contracts.find(c=>c.id===id);
       Object.assign(c, {
         inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'), inicio:g('inicio'), fin:g('fin'),
+        duracion:parseInt(g('duracion'))||null,
         valor:parseFloat(g('valor'))||0, moneda:g('moneda'), actualizaCada:parseInt(g('cada'))||3,
         indice:g('indice'), deposito:parseFloat(g('deposito'))||0, garantia:g('garantia'),
-        proxActualiz:g('prox')||c.proxActualiz, estado:g('estado')||c.estado, pdfNombre:pdfName
+        proxActualiz:g('prox')||c.proxActualiz,
+        estado: (g('estado')==="Automático" ? null : g('estado')) || null,
       });
       persist('contracts', c);
       Contract.view(id);
@@ -1312,11 +1717,12 @@ const Contract = {
       const propId = parseInt(g('prop'));
       const nuevo = {
         id:DB.nextId.contracts++, propId, inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'),
-        inicio:g('inicio'), fin:g('fin'), valor:parseFloat(g('valor'))||0, moneda:g('moneda'),
+        inicio:g('inicio'), fin:g('fin'), duracion:parseInt(g('duracion'))||null,
+        valor:parseFloat(g('valor'))||0, moneda:g('moneda'),
         actualizaCada:parseInt(g('cada'))||3, indice:g('indice'), deposito:parseFloat(g('deposito'))||0,
         garantia:g('garantia'), proxActualiz: g('inicio')?addMonths(g('inicio'),parseInt(g('cada'))||3):null,
-        estado:"Vigente", pdfNombre:pdfName, cuotas:[],
-        depositoPagos:[], adelanto:null, histValores: g('inicio')?[{desde:g('inicio'), valor:parseFloat(g('valor'))||0}]:[]
+        estado:null, cuotas:[], docs:[],
+        depositoPagos:[], histValores: g('inicio')?[{desde:g('inicio'), valor:parseFloat(g('valor'))||0}]:[]
       };
       DB.contracts.push(nuevo);
       persist('contracts', nuevo);
@@ -1332,7 +1738,10 @@ const Contract = {
     const depPagado = (c.depositoPagos||[]).reduce((s,x)=>s+x.monto,0);
     const depFalta = (c.deposito||0) - depPagado;
     const body = `
-      ${can()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-sm" onclick="Contract.form(${c.id})">${I.edit} Editar contrato</button></div>`:""}
+      ${can()?`<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px">
+        <button class="btn btn-sm" onclick="Contract.form(${c.id})">${I.edit} Editar contrato</button>
+        ${(STATE.role==="admin")?`<button class="btn btn-sm" onclick="Contract.eliminar(${c.id})">${I.trash} Eliminar</button>`:""}
+      </div>`:""}
       <div class="detail-grid">
         ${item("Propiedad",esc(p?.titulo||"—"))}${item("Inquilino",esc(c.inquilino))}
         ${item("Garante 1",esc(c.garante||"—"))}${item("Garante 2",esc(c.garante2||"—"))}
@@ -1340,10 +1749,37 @@ const Contract = {
         ${item("Valor actual",`${fmt(c.valor,c.moneda)} ${can()?`<button class="btn btn-sm" style="margin-left:8px;padding:3px 9px" onclick="Actualiz.form(${c.id})">${I.money} Actualizar</button>`:""}`)}
         ${item("Actualización",`cada ${c.actualizaCada}m · ${esc(c.indice)} · próx. ${fdate(c.proxActualiz)}`)}
         ${item("Garantía",esc(c.garantia||"—"))}
-        ${item("Estado",App.contractBadge(c.estado))}
-        ${item("Contrato firmado", c.pdfNombre?`<span class="badge green"><span class="dot"></span>${esc(c.pdfNombre)}</span>`:'<span class="t-muted">No adjuntado</span>')}
+        ${item("Estado",App.contractBadge(estadoContrato(c)))}
+        ${USAR_STORAGE
+          ? item("Documentos", (()=>{ const n=(c.docs||[]).length; return `<button class="btn btn-sm" onclick="Docs.listContrato(${c.id})">${I.file} ${n} ${n===1?'documento':'documentos'}</button>`; })())
+          : item("Documentos", (()=>{ const p=prop(c.propId); return p&&p.drive ? `<a class="drive-link" href="${esc(p.drive)}" target="_blank">${I.drive} Ver en Drive</a>` : '<span class="t-muted">En la carpeta de Drive</span>'; })())}
       </div>
-      ${(c.histValores&&c.histValores.length>1)?`<div class="section"><div class="k" style="font-size:11.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:8px">Historial de valores del alquiler</div><ul class="timeline">${c.histValores.slice().reverse().map(h=>`<li>Desde ${fdate(h.desde)} — ${fmt(h.valor,c.moneda)}</li>`).join("")}</ul></div>`:""}
+      ${(c.histValores&&c.histValores.length)?`
+        <div class="section">
+          <div class="section-head">
+            <h3>Historial de valores del alquiler</h3>
+            ${can()?`<button class="btn btn-sm" onclick="HistVal.form(${c.id})">${I.plus} Agregar registro</button>`:""}
+          </div>
+          <div class="card">
+            ${c.histValores.map((h,i)=>`
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap">
+                <div>
+                  <div class="t-strong">${fmt(h.valor,c.moneda)}</div>
+                  <div class="t-muted">Rige desde el ${fdate(h.desde)}</div>
+                </div>
+                ${can()?`<div class="row-actions">
+                  <button class="icon-btn" title="Editar" onclick="HistVal.form(${c.id},${i})">${I.edit}</button>
+                  <button class="icon-btn" title="Eliminar" onclick="HistVal.eliminar(${c.id},${i})">${I.trash}</button>
+                </div>`:""}
+              </div>`).join("")}
+          </div>
+          <div class="hint" style="margin-top:8px">El valor vigente del contrato es el del registro más reciente. Si corregís una fecha o un monto, revisá que el valor actual del contrato sea el correcto.</div>
+        </div>`
+      : (can()?`<div class="section">
+          <div class="section-head"><h3>Historial de valores del alquiler</h3>
+            <button class="btn btn-sm" onclick="HistVal.form(${c.id})">${I.plus} Agregar registro</button></div>
+          <div class="hint">Todavía no hay actualizaciones registradas.</div>
+        </div>`:"")}
 
       <div class="section"><div class="section-head"><h3>Comisión</h3>
         ${can()?`<button class="btn btn-sm" onclick="Deposito.form(${c.id})">${I.plus} Registrar pago</button>`:""}</div>
@@ -1353,18 +1789,6 @@ const Contract = {
             ${item("Pagado", `${fmt(depPagado,c.moneda)} ${depFalta<=0?'<span class="badge green"><span class="dot"></span>Completo</span>':`<span class="badge amber"><span class="dot"></span>Falta ${fmt(depFalta,c.moneda)}</span>`}`)}
           </div>
           ${(c.depositoPagos&&c.depositoPagos.length)?`<div style="margin-top:14px"><div class="k" style="font-size:11.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:8px">Pagos registrados</div><ul class="timeline">${c.depositoPagos.map(x=>`<li>${fdate(x.fecha)} — ${fmt(x.monto,c.moneda)}</li>`).join("")}</ul></div>`:'<div class="hint" style="margin-top:10px">Sin pagos de la comisión registrados.</div>'}
-        </div>
-      </div>
-
-      <div class="section"><div class="section-head"><h3>Alquiler adelantado</h3>
-        ${(can()&&!c.adelanto)?`<button class="btn btn-sm" onclick="Adelanto.form(${c.id})">${I.plus} Registrar adelanto</button>`:""}</div>
-        <div class="card" style="padding:16px">
-          ${c.adelanto?`<div class="detail-grid">
-            ${item("Monto", fmt(c.adelanto.monto,c.moneda))}
-            ${item("Fecha de cobro", fdate(c.adelanto.fecha))}
-            ${item("Concepto", esc(c.adelanto.nota||"Alquiler adelantado"))}
-          </div>${can()?`<button class="btn btn-sm" style="margin-top:12px" onclick="Adelanto.quitar(${c.id})">Quitar adelanto</button>`:""}`
-          :'<div class="hint">No se registró alquiler adelantado en este contrato (es opcional).</div>'}
         </div>
       </div>
 
@@ -1436,7 +1860,7 @@ const Cobro = {
           <div class="hint">Podés ajustar el alquiler de este mes puntual si hace falta.</div></div>
       </div>
       <div class="form-row one">
-        <div class="field"><label>Fecha real de pago</label><input id="co_fecha" type="date" value="${yaPagado&&q.fechaPago?q.fechaPago:today}" onchange="Cobro.recalc(${contractId},${idx})">
+        <div class="field"><label>Fecha real de pago</label><input id="co_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${yaPagado&&q.fechaPago?q.fechaPago:today}" onchange="Cobro.recalc(${contractId},${idx})">
           <div class="hint" id="co_aviso"></div></div>
       </div>
       <div class="form-section">
@@ -1548,7 +1972,10 @@ const Cobro = {
 const Actualiz = {
   form(contractId){
     const c = DB.contracts.find(c=>c.id===contractId);
+    const atraso = c.proxActualiz ? daysBetween(today, c.proxActualiz) : null;
+    const vencida = atraso != null && atraso < 0;
     Modal.open(`Actualizar alquiler — ${esc(c.inquilino)}`, `
+      ${vencida?`<div class="notice" style="background:#fdf0ee;border-color:#f0c4bc">${I.warn}<div><b>Esta actualización está vencida hace ${-atraso} días</b> (correspondía el ${fdate(c.proxActualiz)}).<br>Si ya se la aplicaste al inquilino, registrala acá con el valor y la fecha en que empezó a regir, así el sistema queda al día y deja de avisarte.</div></div>`:""}
       <div class="notice">${I.info}<div>Ingresá el coeficiente del índice (${esc(c.indice)}) o directamente el nuevo valor. El sistema calcula, aplica el nuevo alquiler y guarda el historial. El valor anterior queda registrado.</div></div>
       <div class="form-row">
         <div class="field"><label>Valor actual</label><input value="${fmt(c.valor,c.moneda)}" disabled></div>
@@ -1563,7 +1990,8 @@ const Actualiz = {
         <div class="hint">Si cargás coeficiente, se calcula solo. Si preferís, escribí el nuevo valor a mano.</div>
       </div>
       <div class="form-row one">
-        <div class="field"><label>Rige desde</label><input id="ac_desde" type="date" value="${c.proxActualiz||today}"></div>
+        <div class="field"><label>Rige desde</label><input id="ac_desde" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${c.proxActualiz||today}">
+          <div class="hint">${vencida?"Es la fecha en que el nuevo valor empezó a regir. Si la actualización ya se aplicó, dejá la fecha real.":"Fecha desde la que rige el nuevo valor."}</div></div>
       </div>
       <div class="breakdown" id="ac_break"></div>
     `, `<button class="btn" onclick="Contract.view(${contractId})">Volver</button><button class="btn btn-primary" onclick="Actualiz.save(${contractId})">Aplicar actualización</button>`);
@@ -1589,10 +2017,24 @@ const Actualiz = {
     c.histValores = c.histValores || [];
     c.histValores.push({ desde, valor:nuevo });
     c.valor = nuevo;
-    c.proxActualiz = addMonths(desde, c.actualizaCada||3);
+
+    // Calcular la PRÓXIMA actualización a futuro.
+    // Si la que se registra estaba atrasada, avanzamos de a un período
+    // hasta caer en una fecha que todavía no pasó (si no, la alarma reaparece al instante).
+    const cada = c.actualizaCada || 3;
+    let prox = addMonths(desde, cada);
+    let vueltas = 0;
+    while (daysBetween(today, prox) < 0 && vueltas < 60) {   // tope de seguridad
+      prox = addMonths(prox, cada);
+      vueltas++;
+    }
+    c.proxActualiz = prox;
+
     // reflejar el nuevo valor también en la propiedad
-    const p = prop(c.propId); if (p) p.valorAlquiler = nuevo;
-    persist('contracts', DB.contracts.find(c=>c.id===contractId));
+    const p = prop(c.propId);
+    if (p) { p.valorAlquiler = nuevo; persist('properties', p); }
+
+    persist('contracts', c);
     Contract.view(contractId);
     setTimeout(()=>alert(`Alquiler actualizado a ${fmt(nuevo,c.moneda)} desde ${fdate(desde)}.\nPróxima actualización: ${fdate(c.proxActualiz)}.`),100);
   }
@@ -1611,7 +2053,7 @@ const Deposito = {
       </div>
       <div class="form-row">
         <div class="field"><label>Monto del pago (${c.moneda})</label><input id="dp_monto" type="number" value="${falta>0?falta:0}"></div>
-        <div class="field"><label>Fecha</label><input id="dp_fecha" type="date" value="${today}"></div>
+        <div class="field"><label>Fecha</label><input id="dp_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${today}"></div>
       </div>
     `, `<button class="btn" onclick="Contract.view(${contractId})">Volver</button><button class="btn btn-primary" onclick="Deposito.save(${contractId})">Registrar pago</button>`);
   },
@@ -1627,37 +2069,662 @@ const Deposito = {
   }
 };
 
-/* ---------- Alquiler adelantado (opcional) ---------- */
-const Adelanto = {
-  form(contractId){
+
+/* ============================================================
+   DOCUMENTOS (Firebase Storage)
+   Los archivos se guardan de verdad en la nube y se pueden
+   abrir desde cualquier computadora.
+   ============================================================ */
+const Docs = {
+  // Si Storage está apagado, el módulo no se usa (los documentos van a Drive)
+  disponible(){
+    if (!USAR_STORAGE || !fbStorage) {
+      alert("Los documentos de esta propiedad se guardan en su carpeta de Drive, junto con las fotos.");
+      return false;
+    }
+    return true;
+  },
+
+  // Documentos de una PROPIEDAD
+  list(propId){
+    if (!Docs.disponible()) return;
+    const p = prop(propId);
+    const docs = p.docs || [];
+    const puedeEditar = can();
+    const body = `
+      ${docs.length ? docs.map((d,i)=>`
+        <div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            ${I.file}
+            <div style="min-width:0">
+              <div class="t-strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nombre)}</div>
+              <div class="t-muted">${esc(d.tipo||"Documento")} · ${fdate(d.fecha)}${d.tam?` · ${Docs.tam(d.tam)}`:""}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <a class="btn btn-sm" href="${esc(d.url)}" target="_blank">${I.down} Abrir</a>
+            ${puedeEditar?`<button class="icon-btn" title="Eliminar" onclick="Docs.eliminar(${propId},${i})">${I.trash}</button>`:""}
+          </div>
+        </div>`).join("")
+      : `<div class="empty" style="padding:30px"><h4>Sin documentos</h4><p>Todavía no se adjuntaron documentos a esta propiedad.</p></div>`}
+      ${puedeEditar?`
+        <div class="form-section" style="margin-top:14px">
+          <h4>${I.plus} Adjuntar documento</h4>
+          <div class="form-row">
+            <div class="field"><label>Tipo de documento</label>
+              <select id="doc_tipo">
+                ${["Escritura","Plano","Boleto de compraventa","Reserva","Ficha técnica","Autorización de venta","Impuestos / servicios","Tasación","Otro"].map(o=>`<option>${o}</option>`).join("")}
+              </select></div>
+            <div class="field"><label>Archivo</label>
+              <input type="file" id="doc_file" style="padding:7px;font-size:13px">
+              <div class="hint">PDF, imagen o documento. Máximo 10 MB.</div></div>
+          </div>
+          <div id="doc_progress" style="display:none;margin-top:8px">
+            <div style="background:var(--line);border-radius:6px;height:8px;overflow:hidden">
+              <div id="doc_bar" style="background:var(--brand);height:100%;width:0%;transition:width .2s"></div>
+            </div>
+            <div class="hint" id="doc_pct" style="margin-top:5px">Subiendo… 0%</div>
+          </div>
+        </div>`:""}
+    `;
+    Modal.open(`Documentos — ${p?.titulo||""}`, body,
+      `<button class="btn" onclick="Modal.close()">Cerrar</button>${puedeEditar?`<button class="btn btn-primary" onclick="Docs.subir(${propId})">Subir documento</button>`:""}`);
+  },
+
+  tam(bytes){
+    if (bytes < 1024) return bytes+" B";
+    if (bytes < 1048576) return Math.round(bytes/1024)+" KB";
+    return (bytes/1048576).toFixed(1)+" MB";
+  },
+
+  async subir(propId){
+    const fileInput = document.getElementById('doc_file');
+    const tipo = document.getElementById('doc_tipo').value;
+    const f = fileInput?.files[0];
+    if (!f) { alert("Elegí un archivo para subir."); return; }
+    if (f.size > 10*1024*1024) { alert("El archivo es muy grande (máximo 10 MB)."); return; }
+    const p = prop(propId);
+    const prog = document.getElementById('doc_progress');
+    const bar = document.getElementById('doc_bar');
+    const pct = document.getElementById('doc_pct');
+    prog.style.display = "block";
+    try {
+      // ruta: propiedades/PROP-0001/1699999999-escritura.pdf
+      const limpio = f.name.replace(/[^\w.\-]/g,"_");
+      const ruta = `propiedades/${p.codigo||p.id}/${Date.now()}-${limpio}`;
+      const ref = fbStorage.ref(ruta);
+      const tarea = ref.put(f);
+      await new Promise((resolve, reject)=>{
+        tarea.on('state_changed',
+          snap => {
+            const porc = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+            bar.style.width = porc+"%";
+            pct.textContent = `Subiendo… ${porc}%`;
+          },
+          err => reject(err),
+          () => resolve()
+        );
+      });
+      const url = await ref.getDownloadURL();
+      p.docs = p.docs || [];
+      p.docs.push({ nombre:f.name, tipo, url, ruta, fecha:today, tam:f.size });
+      await persist('properties', p);
+      Docs.list(propId);
+      App.go(STATE.page);
+    } catch(e) {
+      console.error(e);
+      prog.style.display = "none";
+      alert("No se pudo subir el documento. Revisá tu conexión y que Storage esté habilitado en Firebase.");
+    }
+  },
+
+  async eliminar(propId, idx){
+    const p = prop(propId);
+    const d = (p.docs||[])[idx];
+    if (!d) return;
+    if (!confirm(`¿Eliminar el documento "${d.nombre}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      if (d.ruta) await fbStorage.ref(d.ruta).delete().catch(()=>{}); // si ya no existe, seguimos igual
+      p.docs.splice(idx,1);
+      await persist('properties', p);
+      Docs.list(propId);
+      App.go(STATE.page);
+    } catch(e) {
+      console.error(e);
+      alert("No se pudo eliminar el documento.");
+    }
+  },
+
+  /* ---------- Documentos de un CONTRATO ---------- */
+  listContrato(contractId){
+    if (!Docs.disponible()) return;
     const c = DB.contracts.find(c=>c.id===contractId);
-    Modal.open("Registrar alquiler adelantado", `
-      <div class="notice">${I.info}<div>El alquiler adelantado es opcional y se registra como un cobro independiente, separado de la comisión y de las cuotas mensuales.</div></div>
+    const docs = c.docs || [];
+    const puedeEditar = can();
+    const body = `
+      ${docs.length ? docs.map((d,i)=>`
+        <div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            ${I.file}
+            <div style="min-width:0">
+              <div class="t-strong" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nombre)}</div>
+              <div class="t-muted">${esc(d.tipo||"Documento")} · ${fdate(d.fecha)}${d.tam?` · ${Docs.tam(d.tam)}`:""}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <a class="btn btn-sm" href="${esc(d.url)}" target="_blank">${I.down} Abrir</a>
+            ${puedeEditar?`<button class="icon-btn" title="Eliminar" onclick="Docs.eliminarContrato(${contractId},${i})">${I.trash}</button>`:""}
+          </div>
+        </div>`).join("")
+      : `<div class="empty" style="padding:30px"><h4>Sin documentos</h4><p>Todavía no se adjuntó el contrato firmado ni otros documentos.</p></div>`}
+      ${puedeEditar?`
+        <div class="form-section" style="margin-top:14px">
+          <h4>${I.plus} Adjuntar documento</h4>
+          <div class="form-row">
+            <div class="field"><label>Tipo de documento</label>
+              <select id="doc_tipo">
+                ${["Contrato firmado","Garantía","DNI inquilino","DNI garante","Recibo de sueldo","Inventario","Acta de entrega","Otro"].map(o=>`<option>${o}</option>`).join("")}
+              </select></div>
+            <div class="field"><label>Archivo</label>
+              <input type="file" id="doc_file" style="padding:7px;font-size:13px">
+              <div class="hint">PDF, imagen o documento. Máximo 10 MB.</div></div>
+          </div>
+          <div id="doc_progress" style="display:none;margin-top:8px">
+            <div style="background:var(--line);border-radius:6px;height:8px;overflow:hidden">
+              <div id="doc_bar" style="background:var(--brand);height:100%;width:0%;transition:width .2s"></div>
+            </div>
+            <div class="hint" id="doc_pct" style="margin-top:5px">Subiendo… 0%</div>
+          </div>
+        </div>`:""}
+    `;
+    Modal.open(`Documentos del contrato — ${esc(c.inquilino||"")}`, body,
+      `<button class="btn" onclick="Contract.view(${contractId})">Volver</button>${puedeEditar?`<button class="btn btn-primary" onclick="Docs.subirContrato(${contractId})">Subir documento</button>`:""}`);
+  },
+
+  async subirContrato(contractId){
+    const fileInput = document.getElementById('doc_file');
+    const tipo = document.getElementById('doc_tipo').value;
+    const f = fileInput?.files[0];
+    if (!f) { alert("Elegí un archivo para subir."); return; }
+    if (f.size > 10*1024*1024) { alert("El archivo es muy grande (máximo 10 MB)."); return; }
+    const c = DB.contracts.find(c=>c.id===contractId);
+    const prog = document.getElementById('doc_progress');
+    const bar = document.getElementById('doc_bar');
+    const pct = document.getElementById('doc_pct');
+    prog.style.display = "block";
+    try {
+      const limpio = f.name.replace(/[^\w.\-]/g,"_");
+      const ruta = `contratos/${contractId}/${Date.now()}-${limpio}`;
+      const ref = fbStorage.ref(ruta);
+      const tarea = ref.put(f);
+      await new Promise((resolve, reject)=>{
+        tarea.on('state_changed',
+          snap => {
+            const porc = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+            bar.style.width = porc+"%";
+            pct.textContent = `Subiendo… ${porc}%`;
+          },
+          err => reject(err),
+          () => resolve()
+        );
+      });
+      const url = await ref.getDownloadURL();
+      c.docs = c.docs || [];
+      c.docs.push({ nombre:f.name, tipo, url, ruta, fecha:today, tam:f.size });
+      await persist('contracts', c);
+      Docs.listContrato(contractId);
+    } catch(e) {
+      console.error(e);
+      prog.style.display = "none";
+      alert("No se pudo subir el documento. Revisá tu conexión y que Storage esté habilitado en Firebase.");
+    }
+  },
+
+  async eliminarContrato(contractId, idx){
+    const c = DB.contracts.find(c=>c.id===contractId);
+    const d = (c.docs||[])[idx];
+    if (!d) return;
+    if (!confirm(`¿Eliminar el documento "${d.nombre}"?`)) return;
+    try {
+      if (d.ruta) await fbStorage.ref(d.ruta).delete().catch(()=>{});
+      c.docs.splice(idx,1);
+      await persist('contracts', c);
+      Docs.listContrato(contractId);
+    } catch(e) {
+      console.error(e);
+      alert("No se pudo eliminar el documento.");
+    }
+  },
+};
+
+/* ============================================================
+   AGENDA — acciones pendientes sobre interesados
+   La acción queda pendiente hasta que se marca como ejecutada.
+   Al marcarla, se puede cambiar el estado del interesado,
+   dejar observaciones y agendar la próxima acción.
+   ============================================================ */
+const Agenda = {
+  ejecutar(leadId){
+    const l = DB.leads.find(x=>x.id===leadId);
+    if (!l) return;
+    const p = prop(l.propId);
+    const opt = (arr,cur) => arr.map(o=>`<option ${cur===o?'selected':''}>${o}</option>`).join("");
+    Modal.open(`Acción realizada — ${esc(l.nombre)}`, `
+      <div class="notice">${I.info}<div>Registrá qué pasó en este contacto. La acción va a salir de la lista de pendientes.</div></div>
+      <div class="detail-grid" style="margin-bottom:16px">
+        <div class="detail-item"><div class="k">Interesado</div><div class="v">${esc(l.nombre)}</div></div>
+        <div class="detail-item"><div class="k">Propiedad</div><div class="v">${esc(p?.titulo||"—")}</div></div>
+        <div class="detail-item"><div class="k">Acción agendada</div><div class="v">${fdate(l.proxima)}${l.proxNota?` · ${esc(l.proxNota)}`:""}</div></div>
+        <div class="detail-item"><div class="k">Estado actual</div><div class="v"><span class="badge ${Lead.color(l.estado)}"><span class="dot"></span>${esc(l.estado)}</span></div></div>
+      </div>
+      <div class="form-section">
+        <h4>${I.edit} Resultado del contacto</h4>
+        <div class="form-row one">
+          <div class="field"><label>¿Qué pasó? (observaciones)</label>
+            <textarea id="ag_obs" rows="3" placeholder="Ej: visitó la propiedad, le gustó pero le parece caro. Va a pensarlo."></textarea>
+            <div class="hint">Queda guardado en el historial del interesado.</div></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Nuevo estado del interesado</label>
+            <select id="ag_estado">${opt(["Nuevo","Contactado","Visita agendada","Negociando","Descartado"], l.estado)}</select></div>
+          <div class="field"><label>Fecha del contacto</label>
+            <input id="ag_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${today}"></div>
+        </div>
+      </div>
+      <div class="form-section">
+        <h4>${I.cal} ¿Agendar una próxima acción?</h4>
+        <div class="form-row">
+          <div class="field"><label>Próxima acción (fecha)</label>
+            <input id="ag_proxima" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="">
+            <div class="hint">Dejala vacía si no hay que volver a contactarlo.</div></div>
+          <div class="field"><label>¿Qué hay que hacer?</label>
+            <input id="ag_proxNota" placeholder="Ej: llamarlo para confirmar la oferta"></div>
+        </div>
+      </div>
+    `, `<button class="btn" onclick="App.go(STATE.page)">Cancelar</button>
+        <button class="btn btn-primary" onclick="Agenda.guardar(${leadId})">${I.check} Registrar y cerrar acción</button>`);
+  },
+
+  guardar(leadId){
+    const l = DB.leads.find(x=>x.id===leadId);
+    const g = k => document.getElementById('ag_'+k)?.value || "";
+    const obs = g('obs').trim();
+    const nuevoEstado = g('estado');
+    const fecha = g('fecha') || today;
+    const proxima = g('proxima');
+    const proxNota = g('proxNota').trim();
+
+    // guardar en el historial de contactos
+    l.historial = l.historial || [];
+    l.historial.unshift({
+      fecha,
+      accion: l.proxNota || "Contacto",
+      resultado: obs,
+      estadoDesde: l.estado,
+      estadoHasta: nuevoEstado,
+    });
+
+    l.estado = nuevoEstado;
+    l.fecha = fecha;                       // último contacto
+    if (obs) l.nota = obs;                 // la nota visible pasa a ser lo último que se registró
+    l.proxima = proxima || null;           // nueva acción agendada (o ninguna)
+    l.proxNota = proxima ? proxNota : "";
+    l.accionHecha = !proxima;              // si no hay próxima acción, no queda nada pendiente
+
+    persist('leads', l);
+    App.go(STATE.page);
+    setTimeout(()=>{
+      if (proxima) alert(`Acción registrada.\nPróxima acción agendada para el ${fdate(proxima)}.`);
+      else alert("Acción registrada. No quedó ninguna acción pendiente para este interesado.");
+    },100);
+  },
+};
+
+/* ============================================================
+   TABLERO DE RESUMEN — indicadores para tomar decisiones
+   ============================================================ */
+const Reportes = {
+  periodo: "mes",   // mes | trimestre | semestre | anio
+  offset: 0,        // 0 = período actual, -1 = anterior, etc.
+
+  // Devuelve {desde, hasta, label} del período elegido
+  rango(){
+    const hoy = new Date(today+"T12:00:00");
+    let desde, hasta, label;
+    const anio = hoy.getFullYear();
+    const mes = hoy.getMonth(); // 0-11
+    const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+    if (Reportes.periodo === "mes") {
+      const d = new Date(anio, mes + Reportes.offset, 1);
+      desde = new Date(d.getFullYear(), d.getMonth(), 1);
+      hasta = new Date(d.getFullYear(), d.getMonth()+1, 0);
+      label = `${meses[d.getMonth()]} ${d.getFullYear()}`;
+    } else if (Reportes.periodo === "trimestre") {
+      const trimActual = Math.floor(mes/3);
+      const d = new Date(anio, (trimActual + Reportes.offset)*3, 1);
+      desde = new Date(d.getFullYear(), d.getMonth(), 1);
+      hasta = new Date(d.getFullYear(), d.getMonth()+3, 0);
+      label = `${Math.floor(d.getMonth()/3)+1}° trimestre ${d.getFullYear()}`;
+    } else if (Reportes.periodo === "semestre") {
+      const semActual = Math.floor(mes/6);
+      const d = new Date(anio, (semActual + Reportes.offset)*6, 1);
+      desde = new Date(d.getFullYear(), d.getMonth(), 1);
+      hasta = new Date(d.getFullYear(), d.getMonth()+6, 0);
+      label = `${Math.floor(d.getMonth()/6)+1}° semestre ${d.getFullYear()}`;
+    } else { // año
+      const a = anio + Reportes.offset;
+      desde = new Date(a, 0, 1);
+      hasta = new Date(a, 11, 31);
+      label = `Año ${a}`;
+    }
+    return { desde: isoDate(desde), hasta: isoDate(hasta), label };
+  },
+
+  enRango(fecha, r){
+    if (!fecha) return false;
+    return fecha >= r.desde && fecha <= r.hasta;
+  },
+
+  /* ---------- CÁLCULO DE TODOS LOS INDICADORES ---------- */
+  calcular(){
+    const r = Reportes.rango();
+    const props = DB.properties;
+    const leads = DB.leads;
+    const contratos = DB.contracts;
+
+    // --- VENTAS ---
+    const vendidasPeriodo = props.filter(p => esVendida(p) && Reportes.enRango(p.fechaVenta || p.fechaPub, r));
+    const vendidasTotal = props.filter(p => esVendida(p));
+    // comisión de venta = precio * %
+    const comisionDe = p => (p.valorVenta && p.comision) ? Math.round(p.valorVenta * p.comision/100) : 0;
+    const comVentasUSD = vendidasPeriodo.filter(p=>p.monedaVenta==="USD").reduce((s,p)=>s+comisionDe(p),0);
+    const comVentasARS = vendidasPeriodo.filter(p=>p.monedaVenta!=="USD").reduce((s,p)=>s+comisionDe(p),0);
+
+    // cartera activa (en venta, sin vender)
+    const enVenta = props.filter(p=>p.enVenta && !esVendida(p));
+    const carteraUSD = enVenta.filter(p=>p.monedaVenta==="USD").reduce((s,p)=>s+(p.valorVenta||0),0);
+    const carteraARS = enVenta.filter(p=>p.monedaVenta!=="USD").reduce((s,p)=>s+(p.valorVenta||0),0);
+    // comisiones potenciales si se vendiera toda la cartera
+    const potUSD = enVenta.filter(p=>p.monedaVenta==="USD").reduce((s,p)=>s+comisionDe(p),0);
+    const potARS = enVenta.filter(p=>p.monedaVenta!=="USD").reduce((s,p)=>s+comisionDe(p),0);
+
+    // días promedio de publicación (de las que siguen en venta)
+    const conFecha = enVenta.filter(p=>p.fechaPub);
+    const diasProm = conFecha.length
+      ? Math.round(conFecha.reduce((s,p)=>s+daysBetween(p.fechaPub, today),0)/conFecha.length)
+      : 0;
+
+    // --- ALQUILERES ---
+    const contratosNuevos = contratos.filter(c => Reportes.enRango(c.inicio, r));
+    // comisión de alquiler = el monto de comisión cobrado (un mes)
+    const comAlqCobrada = contratos.reduce((s,c)=>{
+      const pagos = (c.depositoPagos||[]).filter(x=>Reportes.enRango(x.fecha, r));
+      return s + pagos.reduce((ss,x)=>ss+(x.monto||0),0);
+    },0);
+
+    const activos = contratos.filter(c=>estadoContrato(c)==="Vigente");
+    const aComenzar = contratos.filter(c=>estadoContrato(c)==="A comenzar");
+    const porVencer = contratos.filter(c=>{
+      if (estadoContrato(c)!=="Vigente" || !c.fin) return false;
+      const dd = daysBetween(today, c.fin);
+      return dd>=0 && dd<=90;
+    });
+
+    // --- COBRANZA Y MOROSIDAD (del período) ---
+    let esperado=0, cobrado=0, moraCobrada=0;
+    let cuotasImpagas=0, montoImpago=0;
+    contratos.forEach(c=>{
+      (c.cuotas||[]).forEach(q=>{
+        const fechaMes = q.mes+"-01";
+        const dentro = Reportes.enRango(fechaMes, r);
+        if (dentro) {
+          esperado += (q.monto||0);
+          if (q.pagado) {
+            cobrado += (q.monto||0) + (q.ajuste||0) + (q.moraTotal||0);
+            moraCobrada += (q.moraTotal||0);
+          } else {
+            // ¿está vencida?
+            if (daysBetween(q.mes+"-10", today) > 0) { cuotasImpagas++; montoImpago += (q.monto||0); }
+          }
+        }
+      });
+    });
+    const pctCobrado = esperado>0 ? Math.round((cobrado/esperado)*100) : 0;
+
+    // morosidad general (todas las cuotas vencidas impagas, sin importar período)
+    let morososTotal=0, montoMorosoTotal=0;
+    contratos.forEach(c=>{
+      (c.cuotas||[]).forEach(q=>{
+        if (!q.pagado && daysBetween(q.mes+"-10", today) > 0) { morososTotal++; montoMorosoTotal += (q.monto||0); }
+      });
+    });
+
+    // --- INTERESADOS ---
+    const leadsPeriodo = leads.filter(l=>Reportes.enRango(l.creado || l.fecha, r));
+    const porEstado = est => leads.filter(l=>l.estado===est).length;
+    const activosLeads = leads.filter(l=>l.estado!=="Descartado").length;
+    const accionesPendientes = leads.filter(l=>l.proxima && !l.accionHecha && l.estado!=="Descartado").length;
+    const accionesAtrasadas = leads.filter(l=>l.proxima && !l.accionHecha && l.estado!=="Descartado" && daysBetween(today,l.proxima)<0).length;
+    // conversión: interesados que terminaron en propiedad vendida
+    const leadsDeVendidas = leads.filter(l=>{ const p=prop(l.propId); return p && esVendida(p); }).length;
+    const conversion = leads.length ? Math.round((leadsDeVendidas/leads.length)*100) : 0;
+
+    return {
+      r,
+      // ventas
+      vendidasPeriodo: vendidasPeriodo.length, vendidasTotal: vendidasTotal.length,
+      comVentasUSD, comVentasARS, enVenta: enVenta.length,
+      carteraUSD, carteraARS, potUSD, potARS, diasProm,
+      // alquileres
+      contratosNuevos: contratosNuevos.length, comAlqCobrada,
+      activos: activos.length, aComenzar: aComenzar.length, porVencer: porVencer.length,
+      porVencerLista: porVencer,
+      // cobranza
+      esperado, cobrado, pctCobrado, moraCobrada,
+      cuotasImpagas, montoImpago, morososTotal, montoMorosoTotal,
+      // interesados
+      leadsNuevos: leadsPeriodo.length, activosLeads,
+      nuevos: porEstado("Nuevo"), contactados: porEstado("Contactado"),
+      visitas: porEstado("Visita agendada"), negociando: porEstado("Negociando"),
+      descartados: porEstado("Descartado"),
+      accionesPendientes, accionesAtrasadas, conversion,
+    };
+  },
+
+  /* ---------- RENDER ---------- */
+  render(){
+    const d = Reportes.calcular();
+    const per = (id,label) => `<button class="btn btn-sm ${Reportes.periodo===id?'btn-primary':''}" onclick="Reportes.setPeriodo('${id}')">${label}</button>`;
+
+    const card = (titulo, valor, sub, color) => `
+      <div class="card" style="padding:16px 18px">
+        <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:600;margin-bottom:6px">${titulo}</div>
+        <div style="font-size:24px;font-weight:700;color:${color||'var(--ink)'};line-height:1.2">${valor}</div>
+        ${sub?`<div class="t-muted" style="margin-top:4px">${sub}</div>`:""}
+      </div>`;
+
+    const barra = (pct, color) => `
+      <div style="background:var(--line);border-radius:6px;height:8px;overflow:hidden;margin-top:8px">
+        <div style="background:${color};height:100%;width:${Math.min(pct,100)}%;transition:width .3s"></div>
+      </div>`;
+
+    return `
+      <div class="page-head">
+        <div><h2>Tablero de resumen</h2><p>Indicadores del negocio para la toma de decisiones.</p></div>
+      </div>
+
+      <!-- Selector de período -->
+      <div class="filters">
+        <div class="filters-head">
+          <h4>${I.cal} Período</h4>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-sm" onclick="Reportes.mover(-1)">← Anterior</button>
+            <span style="font-weight:600;color:var(--brand);min-width:150px;text-align:center">${d.r.label}</span>
+            <button class="btn btn-sm" onclick="Reportes.mover(1)" ${Reportes.offset>=0?'disabled style="opacity:.4"':''}>Siguiente →</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${per("mes","Mes")} ${per("trimestre","Trimestre")} ${per("semestre","Semestre")} ${per("anio","Año")}
+          ${Reportes.offset!==0?`<button class="btn btn-sm" onclick="Reportes.hoy()">Volver al actual</button>`:""}
+        </div>
+        <div class="hint" style="margin-top:8px">Del ${fdate(d.r.desde)} al ${fdate(d.r.hasta)}</div>
+      </div>
+
+      <!-- INGRESOS POR COMISIONES -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.money} Ingresos por comisiones</h3>
+      <div class="stats" style="margin-bottom:8px">
+        ${card("Comisiones por ventas", (d.comVentasUSD?fmt(d.comVentasUSD,"USD"):"") + (d.comVentasUSD&&d.comVentasARS?" + ":"") + (d.comVentasARS?fmt(d.comVentasARS,"ARS"):(d.comVentasUSD?"":"—")), `${d.vendidasPeriodo} ${d.vendidasPeriodo===1?'venta cerrada':'ventas cerradas'} en el período`, "var(--green)")}
+        ${card("Comisiones por alquileres", d.comAlqCobrada?fmt(d.comAlqCobrada,"ARS"):"—", `Cobrado en el período · ${d.contratosNuevos} ${d.contratosNuevos===1?'contrato nuevo':'contratos nuevos'}`, "var(--green)")}
+        ${card("Mora cobrada", d.moraCobrada?fmt(d.moraCobrada,"ARS"):"—", "Intereses por pagos fuera de término")}
+      </div>
+
+      <!-- OPERACIONES -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.home} Operaciones</h3>
+      <div class="stats" style="margin-bottom:8px">
+        ${card("Propiedades vendidas", d.vendidasPeriodo, `${d.vendidasTotal} vendidas en total (histórico)`)}
+        ${card("Contratos nuevos", d.contratosNuevos, `${d.activos} vigentes · ${d.aComenzar} a comenzar`)}
+        ${card("En venta hoy", d.enVenta, `Promedio de ${d.diasProm} días publicadas`)}
+        ${card("Valor de la cartera",
+          (d.carteraUSD?fmt(d.carteraUSD,"USD"):"") + (d.carteraUSD&&d.carteraARS?" + ":"") + (d.carteraARS?fmt(d.carteraARS,"ARS"):(d.carteraUSD?"":"—")),
+          `Comisión potencial: ${(d.potUSD?fmt(d.potUSD,"USD"):"")}${d.potUSD&&d.potARS?" + ":""}${(d.potARS?fmt(d.potARS,"ARS"):(d.potUSD?"":"—"))}`, "var(--brand)")}
+      </div>
+
+      <!-- COBRANZA -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.money} Cobranza del período</h3>
+      <div class="card" style="padding:18px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:600">Cobrado vs. esperado</div>
+            <div style="font-size:24px;font-weight:700;color:${d.pctCobrado>=90?'var(--green)':(d.pctCobrado>=70?'var(--amber)':'var(--red)')};margin-top:4px">
+              ${fmt(d.cobrado,"ARS")} <span style="font-size:15px;color:var(--ink-soft);font-weight:500">de ${fmt(d.esperado,"ARS")}</span>
+            </div>
+          </div>
+          <div style="font-size:30px;font-weight:700;color:${d.pctCobrado>=90?'var(--green)':(d.pctCobrado>=70?'var(--amber)':'var(--red)')}">${d.pctCobrado}%</div>
+        </div>
+        ${barra(d.pctCobrado, d.pctCobrado>=90?'var(--green)':(d.pctCobrado>=70?'var(--amber)':'var(--red)'))}
+      </div>
+      <div class="stats" style="margin-bottom:8px">
+        ${card("Morosidad (total)", d.morososTotal ? fmt(d.montoMorosoTotal,"ARS") : "Sin morosos",
+          d.morososTotal?`${d.morososTotal} ${d.morososTotal===1?'cuota impaga vencida':'cuotas impagas vencidas'}`:"Todas las cuotas al día",
+          d.morososTotal?"var(--red)":"var(--green)")}
+        ${card("Contratos por vencer", d.porVencer, "En los próximos 90 días", d.porVencer?"var(--amber)":undefined)}
+      </div>
+      ${d.porVencerLista.length?`
+        <div class="card" style="margin-bottom:8px">
+          ${d.porVencerLista.map(c=>{
+            const p = prop(c.propId);
+            const dd = daysBetween(today, c.fin);
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap">
+              <div><div class="t-strong">${esc(p?.titulo||"Propiedad")}</div>
+                   <div class="t-muted">${esc(c.inquilino)} · vence el ${fdate(c.fin)}</div></div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span class="badge ${dd<30?'red':'amber'}"><span class="dot"></span>En ${dd} días</span>
+                <button class="btn btn-sm" onclick="Contract.view(${c.id})">Ver contrato</button>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>`:""}
+
+      <!-- INTERESADOS -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.users} Interesados</h3>
+      <div class="stats" style="margin-bottom:8px">
+        ${card("Nuevos en el período", d.leadsNuevos, `${d.activosLeads} activos en total`)}
+        ${card("En negociación", d.negociando, `${d.visitas} con visita agendada`, d.negociando?"var(--green)":undefined)}
+        ${card("Tasa de conversión", d.conversion+"%", "Interesados sobre propiedades vendidas")}
+        ${card("Acciones pendientes", d.accionesPendientes,
+          d.accionesAtrasadas?`${d.accionesAtrasadas} atrasadas`:"Todo al día",
+          d.accionesAtrasadas?"var(--red)":undefined)}
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:600;margin-bottom:12px">Embudo de interesados</div>
+        ${[["Nuevo",d.nuevos,"var(--brand)"],["Contactado",d.contactados,"#7aa8c4"],["Visita agendada",d.visitas,"var(--amber)"],["Negociando",d.negociando,"var(--green)"],["Descartado",d.descartados,"#b8c0cc"]].map(([lbl,n,col])=>{
+          const max = Math.max(d.nuevos,d.contactados,d.visitas,d.negociando,d.descartados,1);
+          const pct = Math.round((n/max)*100);
+          return `<div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px">
+              <span>${lbl}</span><b>${n}</b>
+            </div>
+            <div style="background:var(--line);border-radius:5px;height:7px;overflow:hidden">
+              <div style="background:${col};height:100%;width:${pct}%"></div>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+    `;
+  },
+
+  setPeriodo(p){ Reportes.periodo = p; Reportes.offset = 0; App.go('reports'); },
+  mover(n){ if (Reportes.offset + n > 0) return; Reportes.offset += n; App.go('reports'); },
+  hoy(){ Reportes.offset = 0; App.go('reports'); },
+};
+
+/* ============================================================
+   HISTORIAL DE VALORES DEL ALQUILER
+   Permite corregir, agregar o borrar registros del historial.
+   Útil para arreglar datos cargados con errores.
+   ============================================================ */
+const HistVal = {
+  form(contractId, idx){
+    const c = DB.contracts.find(c=>c.id===contractId);
+    const editando = idx != null;
+    const h = editando ? c.histValores[idx] : { desde: today, valor: c.valor };
+    Modal.open(editando?"Editar registro del historial":"Agregar registro al historial", `
+      <div class="notice">${I.info}<div>${editando
+        ? "Corregí la fecha o el monto de este registro. Sirve para arreglar datos que se cargaron mal."
+        : "Agregá una actualización que no había quedado registrada en el sistema."}</div></div>
       <div class="form-row">
-        <div class="field"><label>Monto (${c.moneda})</label><input id="ad_monto" type="number" value="${c.valor}"></div>
-        <div class="field"><label>Fecha de cobro</label><input id="ad_fecha" type="date" value="${today}"></div>
+        <div class="field"><label>Rige desde</label>
+          <input id="hv_desde" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(h.desde||today)}">
+          <div class="hint">Fecha en que este valor empezó a regir.</div></div>
+        <div class="field"><label>Valor del alquiler (${esc(c.moneda)})</label>
+          <input id="hv_valor" type="number" value="${h.valor||""}"></div>
       </div>
-      <div class="form-row one">
-        <div class="field"><label>Concepto / aclaración</label><input id="ad_nota" placeholder="Ej: un mes de alquiler adelantado al firmar"></div>
-      </div>
-    `, `<button class="btn" onclick="Contract.view(${contractId})">Volver</button><button class="btn btn-primary" onclick="Adelanto.save(${contractId})">Registrar adelanto</button>`);
+      ${editando?`<div class="hint">Guardado hoy en la base como: <b>${esc(h.desde)}</b> (formato interno año-mes-día).</div>`:""}
+    `, `<button class="btn" onclick="Contract.view(${contractId})">Cancelar</button>
+        <button class="btn btn-primary" onclick="HistVal.guardar(${contractId},${editando?idx:'null'})">${editando?'Guardar cambios':'Agregar'}</button>`);
   },
-  save(contractId){
+
+  guardar(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
-    const monto = parseFloat(document.getElementById('ad_monto').value)||0;
-    const fecha = document.getElementById('ad_fecha').value || today;
-    const nota = document.getElementById('ad_nota').value.trim();
-    if (monto<=0) { alert("Ingresá un monto válido."); return; }
-    c.adelanto = { monto, fecha, nota };
-    persist('contracts', DB.contracts.find(c=>c.id===contractId));
+    const desde = document.getElementById('hv_desde').value;
+    const valor = parseFloat(document.getElementById('hv_valor').value)||0;
+    if (!desde) { alert("Poné la fecha desde la que rige."); return; }
+    if (valor<=0) { alert("Poné un valor válido."); return; }
+
+    c.histValores = c.histValores || [];
+    if (idx != null) c.histValores[idx] = { desde, valor };
+    else c.histValores.push({ desde, valor });
+
+    // ordenar por fecha (del más viejo al más nuevo)
+    c.histValores.sort((a,b)=> a.desde < b.desde ? -1 : (a.desde > b.desde ? 1 : 0));
+
+    // el valor vigente del contrato es el del último registro que ya empezó a regir
+    HistVal.sincronizarValor(c);
+
+    persist('contracts', c);
+    const p = prop(c.propId);
+    if (p) { p.valorAlquiler = c.valor; persist('properties', p); }
     Contract.view(contractId);
   },
-  quitar(contractId){
+
+  eliminar(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
-    c.adelanto = null;
-    persist('contracts', DB.contracts.find(c=>c.id===contractId));
+    const h = c.histValores[idx];
+    if (!confirm(`¿Eliminar el registro de ${fmt(h.valor,c.moneda)} desde el ${fdate(h.desde)}?`)) return;
+    c.histValores.splice(idx,1);
+    HistVal.sincronizarValor(c);
+    persist('contracts', c);
+    const p = prop(c.propId);
+    if (p) { p.valorAlquiler = c.valor; persist('properties', p); }
     Contract.view(contractId);
-  }
+  },
+
+  // El valor vigente = el del registro más reciente que YA empezó a regir
+  sincronizarValor(c){
+    const vigentes = (c.histValores||[]).filter(h=>h.desde <= today);
+    if (vigentes.length) c.valor = vigentes[vigentes.length-1].valor;
+  },
 };
 
 /* ---------- Arranque ---------- */
