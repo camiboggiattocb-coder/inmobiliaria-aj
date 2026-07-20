@@ -179,6 +179,14 @@
   .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
   .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
   .field .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
+  /* Campo de fecha dd/mm/aaaa con almanaque */
+  .date-field { position: relative; display: flex; align-items: center; }
+  .date-field .date-text { width: 100%; padding-right: 40px !important; }
+  .date-field .date-text.date-err { border-color: var(--red); box-shadow: 0 0 0 3px rgba(192,57,43,.12); }
+  .date-field .date-cal { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; right: 10px; }
+  .date-field .date-cal-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--ink-soft); padding: 4px; display: flex; align-items: center; border-radius: 5px; }
+  .date-field .date-cal-btn:hover { background: var(--brand-soft); color: var(--brand); }
+  .date-field .date-cal-btn .ic { width: 17px; height: 17px; }
 
   /* Drive link */
   .drive-link { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-weight: 600; font-size: 13px; text-decoration: none; }
@@ -430,6 +438,95 @@ function isoDate(dt){
 }
 
 /* ════════════════════════════════════════════════════════════
+   CAMPOS DE FECHA EN dd/mm/aaaa
+   El usuario escribe a mano en dd/mm/aaaa O elige del almanaque.
+   No depende del idioma del navegador: siempre se ve dd/mm/aaaa.
+   Internamente todo se guarda como aaaa-mm-dd (formato universal).
+   ════════════════════════════════════════════════════════════ */
+// aaaa-mm-dd  ->  dd/mm/aaaa (para mostrar en el campo de texto)
+function isoADmy(iso){
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+// dd/mm/aaaa (lo que escribe la persona)  ->  aaaa-mm-dd  (null si es inválida)
+function dmyAIso(dmy){
+  if (!dmy) return null;
+  const s = dmy.trim().replace(/-/g,"/").replace(/\./g,"/");
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  let [_, d, mo, y] = m;
+  d = parseInt(d); mo = parseInt(mo); y = parseInt(y);
+  if (mo<1 || mo>12 || d<1 || d>31) return null;
+  const iso = `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  // validar que la fecha exista de verdad (ej: 31/02 no vale)
+  const dt = new Date(iso+"T12:00:00");
+  if (dt.getFullYear()!==y || dt.getMonth()+1!==mo || dt.getDate()!==d) return null;
+  return iso;
+}
+
+/* Genera un campo de fecha dd/mm/aaaa con botón de almanaque.
+   id: identificador base. value: fecha en aaaa-mm-dd. onchange: código JS opcional. */
+function dateInput(id, value, opts={}){
+  const dmy = isoADmy(value||"");
+  const cb = opts.onchange ? ` data-onchange="${esc(opts.onchange).replace(/"/g,'&quot;')}"` : "";
+  return `<span class="date-field">
+    <input type="text" id="${id}" class="date-text" value="${dmy}" placeholder="dd/mm/aaaa"
+           inputmode="numeric" maxlength="10" autocomplete="off"
+           oninput="Fechas.mask(this)" onchange="Fechas.onText('${id}')"${cb}>
+    <input type="date" id="${id}__cal" class="date-cal" value="${value||""}" min="${MIN_FECHA}" max="${MAX_FECHA}"
+           onchange="Fechas.onCal('${id}')" tabindex="-1" aria-label="Elegir del calendario">
+    <button type="button" class="date-cal-btn" onclick="Fechas.abrir('${id}')" tabindex="-1" title="Elegir del calendario">${I.cal}</button>
+  </span>`;
+}
+
+const Fechas = {
+  // formatea mientras se escribe: mete las barras solas
+  mask(el){
+    let v = el.value.replace(/[^\d]/g,"").slice(0,8);
+    if (v.length>=5) v = v.slice(0,2)+"/"+v.slice(2,4)+"/"+v.slice(4);
+    else if (v.length>=3) v = v.slice(0,2)+"/"+v.slice(2);
+    el.value = v;
+  },
+  // cuando se termina de escribir a mano: valida y sincroniza el almanaque
+  onText(id){
+    const txt = document.getElementById(id);
+    const cal = document.getElementById(id+"__cal");
+    const iso = dmyAIso(txt.value);
+    if (iso) { txt.classList.remove("date-err"); if (cal) cal.value = iso; }
+    else if (txt.value.trim()!=="") { txt.classList.add("date-err"); }
+    else { txt.classList.remove("date-err"); if (cal) cal.value=""; }
+    Fechas._fireChange(id);
+  },
+  // cuando se elige del almanaque: refleja en el texto
+  onCal(id){
+    const txt = document.getElementById(id);
+    const cal = document.getElementById(id+"__cal");
+    txt.value = isoADmy(cal.value);
+    txt.classList.remove("date-err");
+    Fechas._fireChange(id);
+  },
+  // abre el almanaque nativo
+  abrir(id){
+    const cal = document.getElementById(id+"__cal");
+    if (cal && cal.showPicker) { try { cal.showPicker(); return; } catch(e){} }
+    if (cal) cal.click();
+  },
+  // dispara el onchange que haya pedido el campo (para recálculos)
+  _fireChange(id){
+    const txt = document.getElementById(id);
+    const code = txt?.getAttribute('data-onchange');
+    if (code) { try { new Function(code)(); } catch(e){ console.error(e); } }
+  },
+  // lee el valor de un campo de fecha como aaaa-mm-dd (o "" si está vacío/inválido)
+  get(id){
+    const txt = document.getElementById(id);
+    if (!txt) return "";
+    return dmyAIso(txt.value) || "";
+  }
+};
+
+/* ════════════════════════════════════════════════════════════
    ADJUNTAR DOCUMENTOS EN EL SISTEMA (Firebase Storage)
    ────────────────────────────────────────────────────────────
    false = los documentos van a la carpeta de Drive (SIN COSTO).
@@ -479,7 +576,7 @@ function computeAlarms() {
     if (est === "Finalizado" || est === "Rescindido") return;
     if (c.proxActualiz) {
       const dd = daysBetween(today, c.proxActualiz);
-      if (dd <= 30) out.push({ level: dd<0?"red":"amber", icon:I.money,
+      if (dd <= 10) out.push({ level: dd<0?"red":"amber", icon:I.money,
         title:`Actualización de alquiler — ${p?.titulo||"Propiedad"}`,
         desc:`Ajuste por ${c.indice} ${dd<0?"vencido":"a aplicar"} el ${fdate(c.proxActualiz)}. Valor actual: ${fmt(c.valor,c.moneda)}.`,
         when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
@@ -487,7 +584,7 @@ function computeAlarms() {
     }
     if (c.fin) {
       const dd = daysBetween(today, c.fin);
-      if (dd <= 90 && dd >= 0) out.push({ level: dd<30?"red":"amber", icon:I.cal,
+      if (dd <= 60 && dd >= 0) out.push({ level: dd<20?"red":"amber", icon:I.cal,
         title:`Vencimiento de contrato — ${p?.titulo||"Propiedad"}`,
         desc:`El contrato de ${c.inquilino} finaliza el ${fdate(c.fin)}`,
         when:`En ${dd} días`, cat:"rentals" });
@@ -507,7 +604,7 @@ function computeAlarms() {
     if (p.enAlquiler && p.aguaCaliente === "Termotanque" && p.ultCambioVarilla) {
       const prox = addMonths(p.ultCambioVarilla, 8);
       const dd = daysBetween(today, prox);
-      if (dd <= 21) out.push({ level: dd<0?"red":"amber", icon:I.flame,
+      if (dd <= 15) out.push({ level: dd<0?"red":"amber", icon:I.flame,
         title:`Cambio de varilla (termotanque) — ${p.titulo}`,
         desc:`Mantenimiento cada 8 meses. ${dd<0?"Vencido el":"A realizar el"} ${fdate(prox)}. Último cambio: ${fdate(p.ultCambioVarilla)}.`,
         when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
@@ -641,10 +738,9 @@ const Filtros = {
             <select id="fr_contrato" onchange="Filtros.aplicar('rentals')">
               <option value="">Todas</option>
               <option value="libre" ${f.contrato==="libre"?'selected':''}>Libres (sin contrato)</option>
-              <option value="ocupada" ${f.contrato==="ocupada"?'selected':''}>Ocupadas (con contrato)</option>
-              <option value="vigente" ${f.contrato==="vigente"?'selected':''}>Contrato vigente</option>
+              <option value="ocupada" ${f.contrato==="ocupada"?'selected':''}>Ocupadas (contrato vigente)</option>
               <option value="acomenzar" ${f.contrato==="acomenzar"?'selected':''}>Contrato a comenzar</option>
-              <option value="porvencer" ${f.contrato==="porvencer"?'selected':''}>Contrato por vencer (90 días)</option>
+              <option value="porvencer" ${f.contrato==="porvencer"?'selected':''}>Contrato por vencer (60 días)</option>
             </select></div>
           <div class="fg"><label>Alquiler desde</label>
             <input id="fr_precioMin" type="number" value="${esc(f.precioMin)}" placeholder="Mín." oninput="Filtros.aplicar('rentals')"></div>
@@ -718,13 +814,12 @@ const Filtros = {
       if (f.contrato) {
         const est = c ? estadoContrato(c) : null;
         if (f.contrato === "libre"      && c) return false;
-        if (f.contrato === "ocupada"    && !c) return false;
-        if (f.contrato === "vigente"    && est !== "Vigente") return false;
+        if (f.contrato === "ocupada"    && est !== "Vigente") return false;
         if (f.contrato === "acomenzar"  && est !== "A comenzar") return false;
         if (f.contrato === "porvencer") {
           if (!c || !c.fin) return false;
           const dd = daysBetween(today, c.fin);
-          if (!(dd >= 0 && dd <= 90)) return false;
+          if (!(dd >= 0 && dd <= 60)) return false;
         }
       }
       const precio = parseFloat(p.valorAlquiler)||0;
@@ -955,7 +1050,7 @@ const App = {
                     ? `<div>${fdate(c.inicio)}</div><div class="t-muted">al ${fdate(c.fin)}</div>
                        ${(diasFin!=null && diasFin>=0 && diasFin<=90 && est==="Vigente")?`<div class="t-muted" style="color:var(--amber)">vence en ${diasFin} días</div>`:""}`
                     : '<span class="t-muted">—</span>'}</td>
-              <td>cada ${p.actualizaCada||"—"} meses<div class="t-muted">índice ${esc(p.indice||"—")}</div></td>
+              <td>cada ${(c&&c.actualizaCada)||p.actualizaCada||"—"} meses<div class="t-muted">índice ${esc((c&&c.indice)||p.indice||"—")}</div></td>
               <td>${p.aguaCaliente?`${p.aguaCaliente==="Termotanque"?I.flame:""} ${esc(p.aguaCaliente)}`:"—"}</td>
               <td><a class="drive-link" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir</a></td>
               <td><div class="row-actions">
@@ -1115,6 +1210,7 @@ const Prop = {
             <label><input type="checkbox" id="f_cocina" ${ck('cocina')}> Cocina</label>
             <label><input type="checkbox" id="f_lavadero" ${ck('lavadero')}> Lavadero</label>
             <label><input type="checkbox" id="f_balcon" ${ck('balcon')}> Balcón</label>
+            <label><input type="checkbox" id="f_piscina" ${ck('piscina')}> Piscina</label>
             <label><input type="checkbox" id="f_amoblado" ${ck('amoblado')} onchange="Prop.toggleAmoblado()"> Amoblado</label>
           </div>
         </div>
@@ -1158,7 +1254,7 @@ const Prop = {
         </div>
         <div class="form-row one" id="sec_varilla">
           <div class="field"><label>Fecha del último cambio de varilla (termotanque)</label>
-            <input id="f_ultCambioVarilla" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('ultCambioVarilla'))}">
+            ${dateInput('f_ultCambioVarilla', v('ultCambioVarilla'))}
             <div class="hint">${I.flame} El sistema le recordará al inquilino el cambio cada 8 meses contando desde esta fecha. Al registrar un cambio, el ciclo se reinicia.</div>
           </div>
         </div>
@@ -1223,7 +1319,7 @@ const Prop = {
           <div class="field"><label>Estado de la operación</label><select id="f_estadoOp">
             ${["Disponible","Reservada","Con seña","Vendida"].map(o=>`<option ${sel('estadoOp',o)}>${o}</option>`).join("")}
           </select></div>
-          <div class="field"><label>Fecha de publicación</label><input id="f_fechaPub" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fechaPub',today))}"></div>
+          <div class="field"><label>Fecha de publicación</label>${dateInput('f_fechaPub', v('fechaPub',today))}</div>
         </div>
         <div class="field" style="margin-bottom:12px"><label>Financiación</label>
           <div class="checkbox-grid" style="grid-template-columns:1fr 1fr">
@@ -1315,11 +1411,75 @@ const Prop = {
   },
   marcarVendida(id){
     const p = prop(id);
-    if (!confirm(`¿Marcar "${p.titulo}" como VENDIDA? Quedará resaltada en rojo.`)) return;
+    const precioPub = p.valorVenta || 0;
+    const comPct = p.comision || 0;
+    Modal.open(`Cerrar venta — ${esc(p.titulo)}`, `
+      <div class="notice">${I.check}<div>Registrá los datos reales del cierre. La comisión se recalcula sobre el valor de venta final.</div></div>
+      <div class="detail-grid" style="margin-bottom:16px">
+        <div class="detail-item"><div class="k">Valor publicado</div><div class="v">${precioPub?fmt(precioPub,p.monedaVenta):"—"}</div></div>
+        <div class="detail-item"><div class="k">Comisión pactada</div><div class="v">${comPct?comPct+"%":"—"}</div></div>
+      </div>
+      <div class="form-section">
+        <h4>${I.money} Datos del cierre</h4>
+        <div class="form-row">
+          <div class="field"><label>Valor real de venta</label>
+            <input id="cv_valor" type="number" value="${precioPub||""}" oninput="Prop.recalcCierre(${id})">
+            <div class="hint">El monto en el que se cerró finalmente la operación.</div></div>
+          <div class="field"><label>Moneda</label>
+            <select id="cv_moneda">
+              <option value="USD" ${p.monedaVenta==="USD"?"selected":""}>USD</option>
+              <option value="ARS" ${p.monedaVenta!=="USD"?"selected":""}>ARS</option>
+            </select></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Fecha de venta</label>${dateInput('cv_fecha', today)}</div>
+          <div class="field"><label>Comprador</label><input id="cv_comprador" placeholder="Nombre del comprador"></div>
+        </div>
+        <div class="breakdown" style="margin-top:6px">
+          <div class="breakdown-row" style="font-weight:600"><span>Comisión de la inmobiliaria (${comPct}%)</span><span id="cv_comision">${precioPub?fmt(Math.round(precioPub*comPct/100),p.monedaVenta):"—"}</span></div>
+          <div class="hint" id="cv_dif"></div>
+        </div>
+      </div>
+    `, `<button class="btn" onclick="Modal.close()">Cancelar</button>
+        <button class="btn btn-primary" onclick="Prop.confirmarVenta(${id})">${I.check} Confirmar venta</button>`);
+    Prop.recalcCierre(id);
+  },
+
+  recalcCierre(id){
+    const p = prop(id);
+    const valor = parseFloat(document.getElementById('cv_valor').value)||0;
+    const moneda = document.getElementById('cv_moneda').value;
+    const comPct = p.comision || 0;
+    const comision = Math.round(valor * comPct/100);
+    document.getElementById('cv_comision').textContent = valor?fmt(comision,moneda):"—";
+    // diferencia con el valor publicado
+    const pub = p.valorVenta || 0;
+    const difBox = document.getElementById('cv_dif');
+    if (pub && valor && p.monedaVenta===moneda) {
+      const dif = valor - pub;
+      if (dif===0) difBox.textContent = "Se cerró al valor publicado.";
+      else if (dif>0) difBox.textContent = `Se cerró ${fmt(dif,moneda)} por encima del publicado.`;
+      else difBox.textContent = `Se cerró ${fmt(-dif,moneda)} por debajo del publicado.`;
+    } else difBox.textContent = "";
+  },
+
+  confirmarVenta(id){
+    const p = prop(id);
+    const valor = parseFloat(document.getElementById('cv_valor').value)||0;
+    const moneda = document.getElementById('cv_moneda').value;
+    const fecha = Fechas.get('cv_fecha') || today;
+    const comprador = document.getElementById('cv_comprador').value.trim();
+    if (valor<=0) { alert("Ingresá el valor real de venta."); return; }
     p.estadoOp = "Vendida";
-    p.fechaVenta = today;   // queda registrada para el tablero de resumen
+    p.fechaVenta = fecha;
+    p.valorCierre = valor;
+    p.monedaCierre = moneda;
+    p.comprador = comprador;
+    p.comisionCierre = Math.round(valor * (p.comision||0)/100);
     persist('properties', p);
+    Modal.close();
     App.go(STATE.page);
+    setTimeout(()=>alert(`Venta registrada.\nValor de cierre: ${fmt(valor,moneda)}\nComisión: ${fmt(p.comisionCierre,moneda)}`),100);
   },
   toggleAguaSec(){
     // El bloque de agua caliente solo aplica a viviendas que estén en alquiler
@@ -1352,6 +1512,7 @@ const Prop = {
 
   save(id){
     const g = k => { const el=document.getElementById('f_'+k); return el?el.value:""; };
+    const gf = k => Fechas.get('f_'+k);   // lee un campo de fecha como aaaa-mm-dd
     const gc = k => { const el=document.getElementById('f_'+k); return el?el.checked:false; };
     const num = k => { const x=parseFloat(g(k)); return isNaN(x)?null:x; };
     const tipo = g('tipo');
@@ -1377,13 +1538,13 @@ const Prop = {
       Object.assign(data, {
         ambientes:num('ambientes'), dorm:num('dorm'), banos:num('banos'), cochera:g('cochera'),
         patio:gc('patio'), living:gc('living'), cocina:gc('cocina'), lavadero:gc('lavadero'),
-        balcon:gc('balcon'), amoblado:gc('amoblado'),
+        balcon:gc('balcon'), piscina:gc('piscina'), amoblado:gc('amoblado'),
         obsAmoblado: gc('amoblado') ? g('obsAmoblado') : "",
       });
       // El agua caliente / termotanque solo aplica a viviendas en alquiler
       if (enAlquiler) {
         data.aguaCaliente = g('aguaCaliente');
-        data.ultCambioVarilla = g('aguaCaliente')==="Termotanque" ? (g('ultCambioVarilla')||null) : null;
+        data.ultCambioVarilla = g('aguaCaliente')==="Termotanque" ? (gf('ultCambioVarilla')||null) : null;
         if (!id) data.historialVarilla = data.ultCambioVarilla ? [data.ultCambioVarilla] : [];
       } else {
         data.aguaCaliente = null;
@@ -1398,7 +1559,7 @@ const Prop = {
     }
     if (enVenta) Object.assign(data, {
       valorVenta:num('valorVenta'), monedaVenta:g('monedaVenta'), obsPrecio:g('obsPrecio'), propietario:g('propietario'),
-      condFiscal:g('condFiscal'), comision:num('comision'), estadoOp:g('estadoOp'), fechaPub:g('fechaPub'),
+      condFiscal:g('condFiscal'), comision:num('comision'), estadoOp:g('estadoOp'), fechaPub:gf('fechaPub'),
       aptaCredito:gc('aptaCredito'), aceptaFinanciacion:gc('aceptaFinanciacion'),
       tipoFinanciacion: gc('aceptaFinanciacion') ? g('tipoFinanciacion') : "",
     });
@@ -1453,7 +1614,7 @@ const Prop = {
       g.push(item("Cochera",esc(p.cochera||"—")));
     }
     if (isVivienda(p.tipo)) {
-      const comod = [p.patio&&"Patio/jardín",p.living&&"Living",p.cocina&&"Cocina",p.lavadero&&"Lavadero",p.balcon&&"Balcón",p.amoblado&&"Amoblado"].filter(Boolean).join(", ")||"—";
+      const comod = [p.patio&&"Patio/jardín",p.living&&"Living",p.cocina&&"Cocina",p.lavadero&&"Lavadero",p.balcon&&"Balcón",p.piscina&&"Piscina",p.amoblado&&"Amoblado"].filter(Boolean).join(", ")||"—";
       g.push(item("Comodidades",comod));
       if (p.amoblado && p.obsAmoblado) g.push(item("Equipamiento", esc(p.obsAmoblado)));
       if (p.enAlquiler && !isViewer) g.push(item("Agua caliente",esc(p.aguaCaliente||"—")));
@@ -1504,10 +1665,20 @@ const Prop = {
         ${(ve('financiacion') && p.aceptaFinanciacion && p.tipoFinanciacion)?`<div class="detail-item" style="margin-top:14px"><div class="k">Detalle de financiación</div><div class="v">${esc(p.tipoFinanciacion)}</div></div>`:""}
         ${(!isViewer && p.histPrecios && p.histPrecios.length>1)?`<div style="margin-top:14px"><div class="k" style="font-size:11.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:8px">Historial de precios</div><ul class="timeline">${p.histPrecios.slice().reverse().map(h=>`<li>${fdate(h.fecha)} — ${fmt(h.valor,h.moneda)}</li>`).join("")}</ul></div>`:""}
       </div>`;
+      // datos del cierre de venta (si ya se vendió)
+      if (!isViewer && esVendida(p) && p.valorCierre!=null) {
+        html += `<div class="section"><div class="section-head"><h3>Cierre de la venta</h3></div><div class="detail-grid">
+          ${item("Valor de cierre", fmt(p.valorCierre, p.monedaCierre||p.monedaVenta))}
+          ${item("Comisión cobrada", fmt(p.comisionCierre||0, p.monedaCierre||p.monedaVenta))}
+          ${item("Fecha de venta", fdate(p.fechaVenta))}
+          ${p.comprador?item("Comprador", esc(p.comprador)):""}
+        </div></div>`;
+      }
     }
-    if (p.enAlquiler) html += `<div class="section"><div class="section-head"><h3>Alquiler</h3></div><div class="detail-grid">
+    if (p.enAlquiler) { const cAlq = DB.contracts.find(c=>c.propId===p.id && contratoActivo(c)) || DB.contracts.find(c=>c.propId===p.id);
+      html += `<div class="section"><div class="section-head"><h3>Alquiler</h3></div><div class="detail-grid">
       ${item("Valor mensual",fmt(p.valorAlquiler,p.monedaAlquiler))}
-      ${item("Actualización",`cada ${p.actualizaCada} meses · ${esc(p.indice||"—")}`)}</div></div>`;
+      ${item("Actualización",`cada ${(cAlq&&cAlq.actualizaCada)||p.actualizaCada||"—"} meses · ${esc((cAlq&&cAlq.indice)||p.indice||"—")}`)}</div></div>`; }
     html += `<div class="section">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-primary" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir carpeta de Drive</a>
@@ -1578,8 +1749,8 @@ const Lead = {
         <div class="field"><label>Contacto</label><input id="l_contacto" value="${esc(v('contacto'))}" placeholder="Teléfono o email"></div></div>
       <div class="form-row"><div class="field"><label>Origen</label><select id="l_origen">${opt(["Cartel","Referido","Portal web","Redes","Llamado","Otro"], v('origen'))}</select></div>
         <div class="field"><label>Estado</label><select id="l_estado">${opt(["Nuevo","Contactado","Visita agendada","Negociando","Descartado"], v('estado'))}</select></div></div>
-      <div class="form-row"><div class="field"><label>Fecha de contacto</label><input id="l_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fecha',today))}"></div>
-        <div class="field"><label>Próxima acción (fecha)</label><input id="l_proxima" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('proxima'))}">
+      <div class="form-row"><div class="field"><label>Fecha de contacto</label>${dateInput('l_fecha', v('fecha',today))}</div>
+        <div class="field"><label>Próxima acción (fecha)</label>${dateInput('l_proxima', v('proxima'))}
           <div class="hint">Aparece en Alarmas hasta que la marques como hecha.</div></div></div>
       <div class="form-row one"><div class="field"><label>¿Qué hay que hacer?</label><input id="l_proxNota" value="${esc(v('proxNota'))}" placeholder="Ej: llamarlo para coordinar la visita"></div></div>
       <div class="form-row one"><div class="field"><label>Nota / observaciones</label><textarea id="l_nota" rows="3">${esc(v('nota'))}</textarea></div></div>
@@ -1594,19 +1765,20 @@ const Lead = {
   },
   save(propId, leadId){
     const g = k=>document.getElementById('l_'+k).value;
+    const gf = k=>Fechas.get('l_'+k);   // fechas como aaaa-mm-dd
     if (!g('nombre')) { alert("Poné el nombre del interesado."); return; }
     if (leadId) {
       const l = DB.leads.find(x=>x.id===leadId);
-      const proxCambio = l.proxima !== g('proxima');
+      const proxCambio = l.proxima !== (gf('proxima')||null);
       Object.assign(l, { nombre:g('nombre'), contacto:g('contacto'), origen:g('origen'),
-        estado:g('estado'), fecha:g('fecha'), proxima:g('proxima')||null, proxNota:g('proxNota'), nota:g('nota') });
+        estado:g('estado'), fecha:gf('fecha'), proxima:gf('proxima')||null, proxNota:g('proxNota'), nota:g('nota') });
       // si se agenda una acción nueva (o se cambia la fecha), vuelve a quedar pendiente
-      if (proxCambio && g('proxima')) l.accionHecha = false;
-      if (!g('proxima')) l.accionHecha = true;
+      if (proxCambio && gf('proxima')) l.accionHecha = false;
+      if (!gf('proxima')) l.accionHecha = true;
       persist('leads', l);
     } else {
       const nuevo = { id:DB.nextId.leads++, propId, nombre:g('nombre'), contacto:g('contacto'),
-        origen:g('origen'), estado:g('estado'), fecha:g('fecha'), proxima:g('proxima')||null,
+        origen:g('origen'), estado:g('estado'), fecha:gf('fecha'), proxima:gf('proxima')||null,
         proxNota:g('proxNota'), nota:g('nota'), accionHecha:false, historial:[], creado:today };
       DB.leads.push(nuevo);
       persist('leads', nuevo);
@@ -1624,7 +1796,7 @@ const Contract = {
   // Calcula la fecha de fin a partir del inicio + duración en meses.
   // El fin queda editable: si la persona lo cambia a mano, se respeta.
   calcFin(){
-    const ini = document.getElementById('c_inicio')?.value;
+    const ini = Fechas.get('c_inicio');
     const dur = parseInt(document.getElementById('c_duracion')?.value)||0;
     const finInput = document.getElementById('c_fin');
     if (!ini || dur<=0 || !finInput) return;
@@ -1632,7 +1804,9 @@ const Contract = {
     const finCalc = addMonths(ini, dur);
     const d = new Date(finCalc+"T12:00:00");
     d.setDate(d.getDate()-1);
-    finInput.value = isoDate(d);
+    const iso = isoDate(d);
+    finInput.value = isoADmy(iso);                          // el campo de texto muestra dd/mm/aaaa
+    const cal = document.getElementById('c_fin__cal'); if (cal) cal.value = iso;  // y el almanaque queda sincronizado
   },
 
   async eliminar(id){
@@ -1671,12 +1845,12 @@ const Contract = {
         <div class="field"><label>Garante 1</label><input id="c_garante" value="${esc(v('garante'))}"></div></div>
       <div class="form-row one"><div class="field"><label>Garante 2 (opcional)</label><input id="c_garante2" value="${esc(v('garante2'))}"></div></div>
       <div class="form-row">
-        <div class="field"><label>Inicio</label><input id="c_inicio" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('inicio'))}" onchange="Contract.calcFin()"></div>
+        <div class="field"><label>Inicio</label>${dateInput('c_inicio', v('inicio'), {onchange:'Contract.calcFin()'})}</div>
         <div class="field"><label>Duración (meses)</label><input id="c_duracion" type="number" min="1" value="${esc(v('duracion',24))}" onchange="Contract.calcFin()" oninput="Contract.calcFin()">
           <div class="hint">Al cargarla, la fecha de fin se calcula sola.</div></div>
       </div>
       <div class="form-row one">
-        <div class="field"><label>Fin</label><input id="c_fin" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('fin'))}">
+        <div class="field"><label>Fin</label>${dateInput('c_fin', v('fin'))}
           <div class="hint">Se calcula automáticamente, pero podés modificarla a mano si hace falta.</div></div>
       </div>
       <div class="form-row"><div class="field"><label>Valor mensual</label><input id="c_valor" type="number" value="${esc(v('valor'))}"></div>
@@ -1686,7 +1860,7 @@ const Contract = {
       <div class="form-row"><div class="field"><label>Comisión (monto total)</label><input id="c_deposito" type="number" value="${esc(v('deposito'))}">
           <div class="hint">Equivale a un mes de alquiler. El cobro (en una o varias cuotas) se registra dentro del contrato.</div></div>
         <div class="field"><label>Tipo de garantía</label><select id="c_garantia">${["Recibo de sueldo","Garantía propietaria","Seguro de caución"].map(o=>`<option ${optSel(v('garantia'),o)}>${o}</option>`).join("")}</select></div></div>
-      ${id?`<div class="form-row"><div class="field"><label>Próxima actualización</label><input id="c_prox" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(v('proxActualiz'))}"></div>
+      ${id?`<div class="form-row"><div class="field"><label>Próxima actualización</label>${dateInput('c_prox', v('proxActualiz'))}</div>
         <div class="field"><label>Estado del contrato</label><select id="c_estado">${["Automático","Finalizado","Rescindido"].map(o=>`<option ${optSel(v('estado'),o)}>${o}</option>`).join("")}</select>
           <div class="hint">Dejalo en "Automático": el sistema pone "A comenzar", "Vigente" o "Finalizado" según las fechas. Usá los otros solo para cerrar un contrato antes de tiempo.</div></div></div>`:''}
       ${USAR_STORAGE
@@ -1700,32 +1874,39 @@ const Contract = {
   },
   save(id){
     const g = k=>{ const el=document.getElementById('c_'+k); return el?el.value:""; };
+    const gf = k=>Fechas.get('c_'+k);   // fechas como aaaa-mm-dd
     if (!g('inquilino')) { alert("Poné el nombre del inquilino."); return; }
     if (id) {
       const c = DB.contracts.find(c=>c.id===id);
       Object.assign(c, {
-        inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'), inicio:g('inicio'), fin:g('fin'),
+        inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'), inicio:gf('inicio'), fin:gf('fin'),
         duracion:parseInt(g('duracion'))||null,
         valor:parseFloat(g('valor'))||0, moneda:g('moneda'), actualizaCada:parseInt(g('cada'))||3,
         indice:g('indice'), deposito:parseFloat(g('deposito'))||0, garantia:g('garantia'),
-        proxActualiz:g('prox')||c.proxActualiz,
+        proxActualiz:gf('prox')||c.proxActualiz,
         estado: (g('estado')==="Automático" ? null : g('estado')) || null,
       });
       persist('contracts', c);
+      // mantener la propiedad alineada con el contrato (frecuencia, índice, valor)
+      const pC = prop(c.propId);
+      if (pC) { pC.actualizaCada = c.actualizaCada; pC.indice = c.indice; pC.valorAlquiler = c.valor; persist('properties', pC); }
       Contract.view(id);
     } else {
       const propId = parseInt(g('prop'));
       const nuevo = {
         id:DB.nextId.contracts++, propId, inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'),
-        inicio:g('inicio'), fin:g('fin'), duracion:parseInt(g('duracion'))||null,
+        inicio:gf('inicio'), fin:gf('fin'), duracion:parseInt(g('duracion'))||null,
         valor:parseFloat(g('valor'))||0, moneda:g('moneda'),
         actualizaCada:parseInt(g('cada'))||3, indice:g('indice'), deposito:parseFloat(g('deposito'))||0,
-        garantia:g('garantia'), proxActualiz: g('inicio')?addMonths(g('inicio'),parseInt(g('cada'))||3):null,
+        garantia:g('garantia'), proxActualiz: gf('inicio')?addMonths(gf('inicio'),parseInt(g('cada'))||3):null,
         estado:null, cuotas:[], docs:[],
-        depositoPagos:[], histValores: g('inicio')?[{desde:g('inicio'), valor:parseFloat(g('valor'))||0}]:[]
+        depositoPagos:[], histValores: gf('inicio')?[{desde:gf('inicio'), valor:parseFloat(g('valor'))||0}]:[]
       };
       DB.contracts.push(nuevo);
       persist('contracts', nuevo);
+      // alinear la propiedad con el contrato recién creado
+      const pN = prop(propId);
+      if (pN) { pN.actualizaCada = nuevo.actualizaCada; pN.indice = nuevo.indice; pN.valorAlquiler = nuevo.valor; persist('properties', pN); }
       persistMeta();
       Modal.close(); App.go('contracts');
     }
@@ -1860,7 +2041,7 @@ const Cobro = {
           <div class="hint">Podés ajustar el alquiler de este mes puntual si hace falta.</div></div>
       </div>
       <div class="form-row one">
-        <div class="field"><label>Fecha real de pago</label><input id="co_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${yaPagado&&q.fechaPago?q.fechaPago:today}" onchange="Cobro.recalc(${contractId},${idx})">
+        <div class="field"><label>Fecha real de pago</label>${dateInput('co_fecha', yaPagado&&q.fechaPago?q.fechaPago:today, {onchange:`Cobro.recalc(${contractId},${idx})`})}
           <div class="hint" id="co_aviso"></div></div>
       </div>
       <div class="form-section">
@@ -1889,7 +2070,7 @@ const Cobro = {
     const c = DB.contracts.find(c=>c.id===contractId);
     const q = c.cuotas[idx];
     const monto = parseFloat(document.getElementById('co_monto').value)||0;
-    const fecha = document.getElementById('co_fecha').value;
+    const fecha = Fechas.get('co_fecha');
     const dd = daysBetween(q.mes+"-10", fecha);
     const conMora = dd>0;
     document.getElementById('co_moraSec').style.display = conMora ? "" : "none";
@@ -1913,7 +2094,7 @@ const Cobro = {
     const c = DB.contracts.find(c=>c.id===contractId);
     const q = c.cuotas[idx];
     const monto = parseFloat(document.getElementById('co_monto').value)||0;
-    const fecha = document.getElementById('co_fecha').value;
+    const fecha = Fechas.get('co_fecha');
     const dd = daysBetween(q.mes+"-10", fecha);
     const conMora = dd>0;
     const ajuste = parseFloat(document.getElementById('co_ajuste').value)||0;
@@ -1990,7 +2171,7 @@ const Actualiz = {
         <div class="hint">Si cargás coeficiente, se calcula solo. Si preferís, escribí el nuevo valor a mano.</div>
       </div>
       <div class="form-row one">
-        <div class="field"><label>Rige desde</label><input id="ac_desde" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${c.proxActualiz||today}">
+        <div class="field"><label>Rige desde</label>${dateInput('ac_desde', c.proxActualiz||today)}
           <div class="hint">${vencida?"Es la fecha en que el nuevo valor empezó a regir. Si la actualización ya se aplicó, dejá la fecha real.":"Fecha desde la que rige el nuevo valor."}</div></div>
       </div>
       <div class="breakdown" id="ac_break"></div>
@@ -2012,7 +2193,7 @@ const Actualiz = {
   save(contractId){
     const c = DB.contracts.find(c=>c.id===contractId);
     const nuevo = parseFloat(document.getElementById('ac_nuevo').value)||0;
-    const desde = document.getElementById('ac_desde').value || today;
+    const desde = Fechas.get('ac_desde') || today;
     if (!nuevo || nuevo<=0) { alert("Ingresá un coeficiente o un nuevo valor válido."); return; }
     c.histValores = c.histValores || [];
     c.histValores.push({ desde, valor:nuevo });
@@ -2053,14 +2234,14 @@ const Deposito = {
       </div>
       <div class="form-row">
         <div class="field"><label>Monto del pago (${c.moneda})</label><input id="dp_monto" type="number" value="${falta>0?falta:0}"></div>
-        <div class="field"><label>Fecha</label><input id="dp_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${today}"></div>
+        <div class="field"><label>Fecha</label>${dateInput('dp_fecha', today)}</div>
       </div>
     `, `<button class="btn" onclick="Contract.view(${contractId})">Volver</button><button class="btn btn-primary" onclick="Deposito.save(${contractId})">Registrar pago</button>`);
   },
   save(contractId){
     const c = DB.contracts.find(c=>c.id===contractId);
     const monto = parseFloat(document.getElementById('dp_monto').value)||0;
-    const fecha = document.getElementById('dp_fecha').value || today;
+    const fecha = Fechas.get('dp_fecha') || today;
     if (monto<=0) { alert("Ingresá un monto válido."); return; }
     c.depositoPagos = c.depositoPagos || [];
     c.depositoPagos.push({ fecha, monto });
@@ -2328,14 +2509,14 @@ const Agenda = {
           <div class="field"><label>Nuevo estado del interesado</label>
             <select id="ag_estado">${opt(["Nuevo","Contactado","Visita agendada","Negociando","Descartado"], l.estado)}</select></div>
           <div class="field"><label>Fecha del contacto</label>
-            <input id="ag_fecha" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${today}"></div>
+            ${dateInput('ag_fecha', today)}</div>
         </div>
       </div>
       <div class="form-section">
         <h4>${I.cal} ¿Agendar una próxima acción?</h4>
         <div class="form-row">
           <div class="field"><label>Próxima acción (fecha)</label>
-            <input id="ag_proxima" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="">
+            ${dateInput('ag_proxima', '')}
             <div class="hint">Dejala vacía si no hay que volver a contactarlo.</div></div>
           <div class="field"><label>¿Qué hay que hacer?</label>
             <input id="ag_proxNota" placeholder="Ej: llamarlo para confirmar la oferta"></div>
@@ -2348,10 +2529,11 @@ const Agenda = {
   guardar(leadId){
     const l = DB.leads.find(x=>x.id===leadId);
     const g = k => document.getElementById('ag_'+k)?.value || "";
+    const gf = k => Fechas.get('ag_'+k);   // fechas como aaaa-mm-dd
     const obs = g('obs').trim();
     const nuevoEstado = g('estado');
-    const fecha = g('fecha') || today;
-    const proxima = g('proxima');
+    const fecha = gf('fecha') || today;
+    const proxima = gf('proxima');
     const proxNota = g('proxNota').trim();
 
     // guardar en el historial de contactos
@@ -2437,9 +2619,21 @@ const Reportes = {
     const vendidasPeriodo = props.filter(p => esVendida(p) && Reportes.enRango(p.fechaVenta || p.fechaPub, r));
     const vendidasTotal = props.filter(p => esVendida(p));
     // comisión de venta = precio * %
-    const comisionDe = p => (p.valorVenta && p.comision) ? Math.round(p.valorVenta * p.comision/100) : 0;
-    const comVentasUSD = vendidasPeriodo.filter(p=>p.monedaVenta==="USD").reduce((s,p)=>s+comisionDe(p),0);
-    const comVentasARS = vendidasPeriodo.filter(p=>p.monedaVenta!=="USD").reduce((s,p)=>s+comisionDe(p),0);
+    // comisión sobre el valor REAL de cierre (si existe); si no, sobre el publicado
+    const monedaVta = p => p.monedaCierre || p.monedaVenta;
+    const valorVta = p => (p.valorCierre!=null ? p.valorCierre : p.valorVenta) || 0;
+    const comisionDe = p => {
+      if (p.comisionCierre!=null) return p.comisionCierre;
+      return (valorVta(p) && p.comision) ? Math.round(valorVta(p) * p.comision/100) : 0;
+    };
+    const comVentasUSD = vendidasPeriodo.filter(p=>monedaVta(p)==="USD").reduce((s,p)=>s+comisionDe(p),0);
+    const comVentasARS = vendidasPeriodo.filter(p=>monedaVta(p)!=="USD").reduce((s,p)=>s+comisionDe(p),0);
+    // publicado vs cerrado (de las ventas del período que tienen valor de cierre)
+    const conCierre = vendidasPeriodo.filter(p=>p.valorCierre!=null);
+    const totalPublicadoUSD = conCierre.filter(p=>p.monedaVenta==="USD").reduce((s,p)=>s+(p.valorVenta||0),0);
+    const totalCerradoUSD   = conCierre.filter(p=>monedaVta(p)==="USD").reduce((s,p)=>s+(p.valorCierre||0),0);
+    const totalPublicadoARS = conCierre.filter(p=>p.monedaVenta!=="USD").reduce((s,p)=>s+(p.valorVenta||0),0);
+    const totalCerradoARS   = conCierre.filter(p=>monedaVta(p)!=="USD").reduce((s,p)=>s+(p.valorCierre||0),0);
 
     // cartera activa (en venta, sin vender)
     const enVenta = props.filter(p=>p.enVenta && !esVendida(p));
@@ -2515,6 +2709,7 @@ const Reportes = {
       // ventas
       vendidasPeriodo: vendidasPeriodo.length, vendidasTotal: vendidasTotal.length,
       comVentasUSD, comVentasARS, enVenta: enVenta.length,
+      totalPublicadoUSD, totalCerradoUSD, totalPublicadoARS, totalCerradoARS, conCierre: conCierre.length,
       carteraUSD, carteraARS, potUSD, potARS, diasProm,
       // alquileres
       contratosNuevos: contratosNuevos.length, comAlqCobrada,
@@ -2589,6 +2784,21 @@ const Reportes = {
           (d.carteraUSD?fmt(d.carteraUSD,"USD"):"") + (d.carteraUSD&&d.carteraARS?" + ":"") + (d.carteraARS?fmt(d.carteraARS,"ARS"):(d.carteraUSD?"":"—")),
           `Comisión potencial: ${(d.potUSD?fmt(d.potUSD,"USD"):"")}${d.potUSD&&d.potARS?" + ":""}${(d.potARS?fmt(d.potARS,"ARS"):(d.potUSD?"":"—"))}`, "var(--brand)")}
       </div>
+
+      ${d.conCierre>0 ? `
+      <!-- PUBLICADO VS CERRADO -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.money} Publicado vs. cerrado</h3>
+      <div class="card" style="padding:18px;margin-bottom:8px">
+        <div class="hint" style="margin-bottom:10px">Comparación entre el valor publicado y el valor real de cierre de las ${d.conCierre} ${d.conCierre===1?'venta cerrada':'ventas cerradas'} del período.</div>
+        ${d.totalPublicadoUSD||d.totalCerradoUSD ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)">
+          <span>En dólares</span>
+          <span><b>${fmt(d.totalPublicadoUSD,"USD")}</b> publicado → <b style="color:${d.totalCerradoUSD>=d.totalPublicadoUSD?'var(--green)':'var(--red)'}">${fmt(d.totalCerradoUSD,"USD")}</b> cerrado</span>
+        </div>`:""}
+        ${d.totalPublicadoARS||d.totalCerradoARS ? `<div style="display:flex;justify-content:space-between;padding:8px 0">
+          <span>En pesos</span>
+          <span><b>${fmt(d.totalPublicadoARS,"ARS")}</b> publicado → <b style="color:${d.totalCerradoARS>=d.totalPublicadoARS?'var(--green)':'var(--red)'}">${fmt(d.totalCerradoARS,"ARS")}</b> cerrado</span>
+        </div>`:""}
+      </div>` : ""}
 
       <!-- COBRANZA -->
       <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.money} Cobranza del período</h3>
@@ -2675,7 +2885,7 @@ const HistVal = {
         : "Agregá una actualización que no había quedado registrada en el sistema."}</div></div>
       <div class="form-row">
         <div class="field"><label>Rige desde</label>
-          <input id="hv_desde" type="date" min="${MIN_FECHA}" max="${MAX_FECHA}" value="${esc(h.desde||today)}">
+          ${dateInput('hv_desde', h.desde||today)}
           <div class="hint">Fecha en que este valor empezó a regir.</div></div>
         <div class="field"><label>Valor del alquiler (${esc(c.moneda)})</label>
           <input id="hv_valor" type="number" value="${h.valor||""}"></div>
@@ -2687,7 +2897,7 @@ const HistVal = {
 
   guardar(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
-    const desde = document.getElementById('hv_desde').value;
+    const desde = Fechas.get('hv_desde');
     const valor = parseFloat(document.getElementById('hv_valor').value)||0;
     if (!desde) { alert("Poné la fecha desde la que rige."); return; }
     if (valor<=0) { alert("Poné un valor válido."); return; }
