@@ -382,6 +382,7 @@ const I = {
   money:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
   cal:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   flame:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+  tool:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   pdf:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
   tools:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   info:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
@@ -610,6 +611,18 @@ function computeAlarms() {
         when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
         action:`Mant.registrarVarilla(${p.id})` });
     }
+    // Reparaciones pendientes: aparecen apenas se cargan y hasta que se resuelven
+    if (p.enAlquiler && (p.reparaciones||[]).length) {
+      p.reparaciones.forEach((r,i) => {
+        if (r.fechaRep) return;                      // ya está reparada
+        const dd = r.fechaRot ? daysBetween(r.fechaRot, today) : 0;
+        out.push({ level: dd>15?"red":"amber", icon:I.tool,
+          title:`Reparación pendiente — ${p.titulo}`,
+          desc:`${esc(r.detalle||"Reparación")}. Rotura del ${fdate(r.fechaRot)}${r.contratado?` · ${esc(r.contratado)}`:""}.`,
+          when: dd>0?`Hace ${dd} ${dd===1?'día':'días'}`:"Hoy", cat:"rentals",
+          action:`Repar.form(${p.id},${i})`, actionLabel:"Registrar arreglo" });
+      });
+    }
   });
   DB.leads.forEach(l => {
     // AGENDA: la próxima acción queda pendiente hasta que se marque como ejecutada.
@@ -741,6 +754,7 @@ const Filtros = {
               <option value="ocupada" ${f.contrato==="ocupada"?'selected':''}>Ocupadas (contrato vigente)</option>
               <option value="acomenzar" ${f.contrato==="acomenzar"?'selected':''}>Contrato a comenzar</option>
               <option value="porvencer" ${f.contrato==="porvencer"?'selected':''}>Contrato por vencer (60 días)</option>
+              <option value="reparacion" ${f.contrato==="reparacion"?'selected':''}>Con reparación pendiente</option>
             </select></div>
           <div class="fg"><label>Alquiler desde</label>
             <input id="fr_precioMin" type="number" value="${esc(f.precioMin)}" placeholder="Mín." oninput="Filtros.aplicar('rentals')"></div>
@@ -820,6 +834,10 @@ const Filtros = {
           if (!c || !c.fin) return false;
           const dd = daysBetween(today, c.fin);
           if (!(dd >= 0 && dd <= 60)) return false;
+        }
+        if (f.contrato === "reparacion") {
+          const pend = (p.reparaciones||[]).some(x=>!x.fechaRep);
+          if (!pend) return false;
         }
       }
       const precio = parseFloat(p.valorAlquiler)||0;
@@ -1033,7 +1051,7 @@ const App = {
     if (!alquileres.length) return contador + App.emptyState("Sin resultados","Ninguna propiedad coincide con los filtros. Probá ampliarlos.",null,null);
     return contador + `
       <div class="table-wrap"><table>
-        <thead><tr><th>Código</th><th>Propiedad</th><th>Valor alquiler</th><th>Contrato</th><th>Vigencia</th><th>Actualización</th><th>Agua cal.</th><th>Drive</th><th></th></tr></thead>
+        <thead><tr><th>Código</th><th>Propiedad</th><th>Valor alquiler</th><th>Contrato</th><th>Vigencia</th><th>Actualización</th><th>Agua cal.</th><th>Reparac.</th><th>Drive</th><th></th></tr></thead>
         <tbody>
           ${alquileres.map(p=>{
             const c = DB.contracts.find(c=>c.propId===p.id && contratoActivo(c))
@@ -1052,9 +1070,13 @@ const App = {
                     : '<span class="t-muted">—</span>'}</td>
               <td>cada ${(c&&c.actualizaCada)||p.actualizaCada||"—"} meses<div class="t-muted">índice ${esc((c&&c.indice)||p.indice||"—")}</div></td>
               <td>${p.aguaCaliente?`${p.aguaCaliente==="Termotanque"?I.flame:""} ${esc(p.aguaCaliente)}`:"—"}</td>
+              <td>${(()=>{ const rs=p.reparaciones||[]; const pe=rs.filter(x=>!x.fechaRep).length;
+                    if (!rs.length) return '<span class="t-muted">—</span>';
+                    return pe?`<span class="badge red"><span class="dot"></span>${pe} pend.</span>`:`<span class="badge green"><span class="dot"></span>${rs.length}</span>`; })()}</td>
               <td><a class="drive-link" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir</a></td>
               <td><div class="row-actions">
                 <button class="icon-btn" title="Ver" onclick="Prop.view(${p.id})">${I.eye}</button>
+                ${can()?`<button class="icon-btn" title="Reparaciones" onclick="Repar.list(${p.id})">${I.tool}</button>`:""}
                 ${c?`<button class="icon-btn" title="Contrato" onclick="Contract.view(${c.id})">${I.contract}</button>`:`<button class="icon-btn" title="Cargar contrato" onclick="Contract.form(null,${p.id})">${I.plus}</button>`}
               </div></td>
             </tr>`;
@@ -1678,7 +1700,19 @@ const Prop = {
     if (p.enAlquiler) { const cAlq = DB.contracts.find(c=>c.propId===p.id && contratoActivo(c)) || DB.contracts.find(c=>c.propId===p.id);
       html += `<div class="section"><div class="section-head"><h3>Alquiler</h3></div><div class="detail-grid">
       ${item("Valor mensual",fmt(p.valorAlquiler,p.monedaAlquiler))}
-      ${item("Actualización",`cada ${(cAlq&&cAlq.actualizaCada)||p.actualizaCada||"—"} meses · ${esc((cAlq&&cAlq.indice)||p.indice||"—")}`)}</div></div>`; }
+      ${item("Actualización",`cada ${(cAlq&&cAlq.actualizaCada)||p.actualizaCada||"—"} meses · ${esc((cAlq&&cAlq.indice)||p.indice||"—")}`)}</div></div>`;
+      // ---- Reparaciones ----
+      const reps = p.reparaciones || [];
+      const pend = reps.filter(x=>!x.fechaRep).length;
+      const gastado = reps.filter(x=>x.fechaRep).reduce((s,x)=>s+(x.costo||0),0);
+      html += `<div class="section"><div class="section-head"><h3>Reparaciones</h3>
+          ${can()?`<button class="btn btn-sm" onclick="Repar.list(${p.id})">${I.tool} Ver / cargar</button>`:""}</div>
+        <div class="detail-grid">
+          ${item("Registradas", String(reps.length))}
+          ${item("Pendientes", pend?`<span class="badge red"><span class="dot"></span>${pend}</span>`:'<span class="badge green"><span class="dot"></span>Ninguna</span>')}
+          ${item("Gasto acumulado", gastado?fmt(gastado,"ARS"):"—")}
+        </div></div>`;
+    }
     html += `<div class="section">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-primary" href="${esc(p.drive)}" target="_blank">${I.drive} Abrir carpeta de Drive</a>
@@ -1689,6 +1723,144 @@ const Prop = {
         : `Ahí están las fotos, los planos y los documentos${p.codigo?` (carpeta ${esc(p.codigo)})`:""}.`}</div>
     </div>`;
     Modal.open(p.titulo, html);
+  },
+};
+
+/* ============================================================
+   REPARACIONES (propiedades en alquiler)
+   Registro de arreglos: qué se rompió, cuándo, quién lo reparó,
+   cuánto costó, quién lo paga y el respaldo en Drive.
+   Mientras no tenga fecha de reparación, queda PENDIENTE y
+   aparece en Alarmas.
+   ============================================================ */
+const Repar = {
+  list(propId){
+    const p = prop(propId);
+    const reps = (p.reparaciones||[]).slice().sort((a,b)=> (b.fechaRot||"") < (a.fechaRot||"") ? -1 : 1);
+    const puedeEditar = can();
+    const pendientes = reps.filter(x=>!x.fechaRep);
+    const hechas = reps.filter(x=>x.fechaRep);
+    const gastoTotal = hechas.reduce((s,x)=>s+(x.costo||0),0);
+    const gastoProp = hechas.filter(x=>x.pagaQuien==="Propietario").reduce((s,x)=>s+(x.costo||0),0);
+    const gastoInq  = hechas.filter(x=>x.pagaQuien==="Inquilino").reduce((s,x)=>s+(x.costo||0),0);
+
+    const fila = (r,i) => {
+      const pendiente = !r.fechaRep;
+      const dias = r.fechaRot ? daysBetween(r.fechaRot, today) : null;
+      return `<div class="card" style="padding:14px 16px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="t-strong">${esc(r.detalle||"Reparación")}</span>
+              ${pendiente
+                ? `<span class="badge red"><span class="dot"></span>Pendiente${dias!=null&&dias>0?` · ${dias} ${dias===1?'día':'días'}`:""}</span>`
+                : '<span class="badge green"><span class="dot"></span>Reparada</span>'}
+            </div>
+            <div class="t-muted" style="margin-top:4px">
+              Rotura: ${fdate(r.fechaRot)}${r.fechaRep?` · Reparada: ${fdate(r.fechaRep)}`:""}
+            </div>
+            <div class="t-muted">
+              ${r.contratado?`${esc(r.contratado)} · `:""}${r.costo?fmt(r.costo,"ARS"):"Sin costo cargado"}${r.pagaQuien?` · Paga: ${esc(r.pagaQuien)}`:""}
+            </div>
+            ${r.drive?`<div style="margin-top:6px"><a class="drive-link" href="${esc(r.drive)}" target="_blank">${I.drive} Fotos y documentos</a></div>`:""}
+          </div>
+          ${puedeEditar?`<div class="row-actions">
+            <button class="icon-btn" title="Editar" onclick="Repar.form(${propId},${i})">${I.edit}</button>
+            <button class="icon-btn" title="Eliminar" onclick="Repar.eliminar(${propId},${i})">${I.trash}</button>
+          </div>`:""}
+        </div>
+      </div>`;
+    };
+
+    const body = `
+      ${reps.length?`
+        <div class="stats" style="margin-bottom:16px">
+          <div class="stat"><div class="lbl">Pendientes</div><div class="val" style="color:${pendientes.length?'var(--red)':'var(--green)'}">${pendientes.length}</div><div class="sub">${pendientes.length?'sin resolver':'todo al día'}</div></div>
+          <div class="stat"><div class="lbl">Gasto total</div><div class="val">${gastoTotal?fmt(gastoTotal,"ARS"):"—"}</div><div class="sub">${hechas.length} ${hechas.length===1?'reparación':'reparaciones'}</div></div>
+          <div class="stat"><div class="lbl">Paga propietario</div><div class="val">${gastoProp?fmt(gastoProp,"ARS"):"—"}</div><div class="sub">Inquilino: ${gastoInq?fmt(gastoInq,"ARS"):"—"}</div></div>
+        </div>`:""}
+
+      ${pendientes.length?`<div class="k" style="font-size:11.5px;text-transform:uppercase;color:var(--red);font-weight:700;margin-bottom:8px">Pendientes</div>
+        ${reps.map((r,i)=>!r.fechaRep?fila(r,i):"").join("")}`:""}
+
+      ${hechas.length?`<div class="k" style="font-size:11.5px;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin:16px 0 8px">Reparadas</div>
+        ${reps.map((r,i)=>r.fechaRep?fila(r,i):"").join("")}`:""}
+
+      ${!reps.length?`<div class="empty" style="padding:30px"><div class="ic">${I.tool}</div><h4>Sin reparaciones</h4><p>Todavía no se registraron reparaciones en esta propiedad.</p></div>`:""}
+    `;
+    Modal.open(`Reparaciones — ${esc(p.titulo)}`, body,
+      `<button class="btn" onclick="Prop.view(${propId})">Volver</button>${puedeEditar?`<button class="btn btn-primary" onclick="Repar.form(${propId})">${I.plus} Nueva reparación</button>`:""}`);
+  },
+
+  form(propId, idx){
+    const p = prop(propId);
+    const editando = idx != null;
+    const r = editando ? p.reparaciones[idx] : { fechaRot:today, fechaRep:"", detalle:"", contratado:"", costo:"", pagaQuien:"Propietario", drive:"" };
+    Modal.open(editando?"Editar reparación":"Nueva reparación", `
+      <div class="notice">${I.info}<div>Si todavía no se reparó, dejá vacía la fecha de reparación: va a quedar como <b>pendiente</b> y aparecer en Alarmas hasta que se resuelva.</div></div>
+      <div class="form-row one">
+        <div class="field"><label>¿Qué se rompió?</label>
+          <input id="rp_detalle" value="${esc(r.detalle||"")}" placeholder="Ej: pérdida de agua en el baño">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Fecha de rotura</label>${dateInput('rp_fechaRot', r.fechaRot||today)}
+          <div class="hint">Cuándo se rompió o se avisó.</div></div>
+        <div class="field"><label>Fecha de reparación</label>${dateInput('rp_fechaRep', r.fechaRep||"")}
+          <div class="hint">Dejala vacía si sigue pendiente.</div></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Contratado para reparar</label>
+          <input id="rp_contratado" value="${esc(r.contratado||"")}" placeholder="Ej: Juan Pérez (plomero)"></div>
+        <div class="field"><label>Costo (pesos)</label>
+          <input id="rp_costo" type="number" value="${r.costo||""}" placeholder="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>¿Quién lo paga?</label>
+          <select id="rp_pagaQuien">
+            ${["Propietario","Inquilino","A definir"].map(o=>`<option ${r.pagaQuien===o?'selected':''}>${o}</option>`).join("")}
+          </select></div>
+        <div class="field"><label>Carpeta de Drive (respaldo)</label>
+          <input id="rp_drive" value="${esc(r.drive||"")}" placeholder="https://drive.google.com/...">
+          <div class="hint">Fotos y documentos de la rotura y el arreglo.</div></div>
+      </div>
+    `, `<button class="btn" onclick="Repar.list(${propId})">Cancelar</button>
+        <button class="btn btn-primary" onclick="Repar.guardar(${propId},${editando?idx:'null'})">${editando?'Guardar cambios':'Registrar'}</button>`);
+  },
+
+  guardar(propId, idx){
+    const p = prop(propId);
+    const g = k => document.getElementById('rp_'+k)?.value || "";
+    const detalle = g('detalle').trim();
+    const fechaRot = Fechas.get('rp_fechaRot');
+    const fechaRep = Fechas.get('rp_fechaRep');
+    if (!detalle) { alert("Escribí qué se rompió."); return; }
+    if (!fechaRot) { alert("Poné la fecha de rotura."); return; }
+    if (fechaRep && fechaRep < fechaRot) { alert("La fecha de reparación no puede ser anterior a la de rotura."); return; }
+
+    const dato = {
+      detalle,
+      fechaRot,
+      fechaRep: fechaRep || "",
+      contratado: g('contratado').trim(),
+      costo: parseFloat(g('costo'))||0,
+      pagaQuien: g('pagaQuien'),
+      drive: g('drive').trim(),
+    };
+    p.reparaciones = p.reparaciones || [];
+    if (idx != null) p.reparaciones[idx] = dato;
+    else p.reparaciones.push(dato);
+    persist('properties', p);
+    Repar.list(propId);
+  },
+
+  eliminar(propId, idx){
+    const p = prop(propId);
+    const r = p.reparaciones[idx];
+    if (!confirm(`¿Eliminar la reparación "${r.detalle}"? Esta acción no se puede deshacer.`)) return;
+    p.reparaciones.splice(idx,1);
+    persist('properties', p);
+    Repar.list(propId);
   },
 };
 
@@ -2694,6 +2866,21 @@ const Reportes = {
       });
     });
 
+    // --- REPARACIONES ---
+    // se cuentan las reparadas dentro del período (por fecha de reparación)
+    let repCosto=0, repProp=0, repInq=0, repCant=0, repPendientes=0;
+    props.forEach(p=>{
+      (p.reparaciones||[]).forEach(rp=>{
+        if (!rp.fechaRep) { if (p.enAlquiler) repPendientes++; return; }
+        if (!Reportes.enRango(rp.fechaRep, r)) return;
+        repCant++;
+        const c = rp.costo||0;
+        repCosto += c;
+        if (rp.pagaQuien==="Propietario") repProp += c;
+        else if (rp.pagaQuien==="Inquilino") repInq += c;
+      });
+    });
+
     // --- INTERESADOS ---
     const leadsPeriodo = leads.filter(l=>Reportes.enRango(l.creado || l.fecha, r));
     const porEstado = est => leads.filter(l=>l.estado===est).length;
@@ -2718,6 +2905,7 @@ const Reportes = {
       // cobranza
       esperado, cobrado, pctCobrado, moraCobrada,
       cuotasImpagas, montoImpago, morososTotal, montoMorosoTotal,
+      repCosto, repProp, repInq, repCant, repPendientes,
       // interesados
       leadsNuevos: leadsPeriodo.length, activosLeads,
       nuevos: porEstado("Nuevo"), contactados: porEstado("Contactado"),
@@ -2835,6 +3023,15 @@ const Reportes = {
             </div>`;
           }).join("")}
         </div>`:""}
+
+      <!-- REPARACIONES -->
+      <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.tool} Reparaciones</h3>
+      <div class="stats" style="margin-bottom:8px">
+        ${card("Gasto del período", d.repCosto?fmt(d.repCosto,"ARS"):"—", `${d.repCant} ${d.repCant===1?'reparación realizada':'reparaciones realizadas'}`)}
+        ${card("Paga el propietario", d.repProp?fmt(d.repProp,"ARS"):"—", "Costos a cargo del dueño")}
+        ${card("Paga el inquilino", d.repInq?fmt(d.repInq,"ARS"):"—", "Costos a cargo del inquilino")}
+        ${card("Pendientes", d.repPendientes, d.repPendientes?"sin resolver":"todo al día", d.repPendientes?"var(--red)":"var(--green)")}
+      </div>
 
       <!-- INTERESADOS -->
       <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.users} Interesados</h3>
