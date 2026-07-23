@@ -410,6 +410,7 @@ const STATE = { role:"admin", page:"dashboard", usuario:null,
   // Filtros de búsqueda (se mantienen mientras dura la sesión)
   fSales: { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" },
   fRentals: { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" },
+  fMaster: { texto:"" },
 };
 
 /* ---------- Configuración de roles ---------- */
@@ -577,11 +578,20 @@ function computeAlarms() {
     if (est === "Finalizado" || est === "Rescindido") return;
     if (c.proxActualiz) {
       const dd = daysBetween(today, c.proxActualiz);
-      if (dd <= 10) out.push({ level: dd<0?"red":"amber", icon:I.money,
+      // Se avisa desde 10 días antes y hasta 60 días después de vencida.
+      // Pasado ese plazo el dato quedó desactualizado (la actualización se hizo
+      // pero no se registró), y la alarma dejaría de ser útil: se avisa aparte.
+      if (dd <= 10 && dd >= -60) out.push({ level: dd<0?"red":"amber", icon:I.money,
         title:`Actualización de alquiler — ${p?.titulo||"Propiedad"}`,
         desc:`Ajuste por ${c.indice} ${dd<0?"vencido":"a aplicar"} el ${fdate(c.proxActualiz)}. Valor actual: ${fmt(c.valor,c.moneda)}.`,
         when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
         action:`Actualiz.form(${c.id})`, actionLabel:"Actualizar" });
+      // Muy vencida: probablemente la fecha quedó desfasada respecto del historial
+      else if (dd < -60) out.push({ level:"amber", icon:I.warn,
+        title:`Revisar fecha de actualización — ${p?.titulo||"Propiedad"}`,
+        desc:`La próxima actualización figura el ${fdate(c.proxActualiz)}, hace más de 60 días. Si el alquiler ya se actualizó, recalculá la fecha desde el historial de valores.`,
+        when:`Desfasada ${-dd} días`, cat:"rentals",
+        action:`Actualiz.recalcularDesdeHistorial(${c.id})`, actionLabel:"Recalcular" });
     }
     if (c.fin) {
       const dd = daysBetween(today, c.fin);
@@ -590,13 +600,14 @@ function computeAlarms() {
         desc:`El contrato de ${c.inquilino} finaliza el ${fdate(c.fin)}`,
         when:`En ${dd} días`, cat:"rentals" });
     }
-    (c.cuotas||[]).forEach(q => {
+    (c.cuotas||[]).forEach((q,qi) => {
       if (!q.pagado) {
         const dd = daysBetween(q.mes+"-10", today);
         if (dd > 0) out.push({ level:"red", icon:I.warn,
           title:`Cuota impaga — ${p?.titulo||"Propiedad"}`,
           desc:`${c.inquilino}: cuota ${q.mes} vencida hace ${dd} días.`,
-          when:`Venció hace ${dd} días`, cat:"rentals" });
+          when:`Venció hace ${dd} días`, cat:"rentals",
+          action:`Cobro.form(${c.id},${qi})`, actionLabel:"Cobrar" });
       }
     });
   });
@@ -605,10 +616,17 @@ function computeAlarms() {
     if (p.enAlquiler && p.aguaCaliente === "Termotanque" && p.ultCambioVarilla) {
       const prox = addMonths(p.ultCambioVarilla, 8);
       const dd = daysBetween(today, prox);
-      if (dd <= 15) out.push({ level: dd<0?"red":"amber", icon:I.flame,
+      // Se avisa desde 15 días antes; si pasaron más de 120 días vencido,
+      // el dato quedó viejo (el cambio se hizo sin registrarse) y se avisa distinto.
+      if (dd <= 15 && dd >= -120) out.push({ level: dd<0?"red":"amber", icon:I.flame,
         title:`Cambio de varilla (termotanque) — ${p.titulo}`,
         desc:`Mantenimiento cada 8 meses. ${dd<0?"Vencido el":"A realizar el"} ${fdate(prox)}. Último cambio: ${fdate(p.ultCambioVarilla)}.`,
         when: dd<0?`Hace ${-dd} días`:`En ${dd} días`, cat:"rentals",
+        action:`Mant.registrarVarilla(${p.id})` });
+      else if (dd < -120) out.push({ level:"amber", icon:I.warn,
+        title:`Revisar mantenimiento — ${p.titulo}`,
+        desc:`El último cambio de varilla figura el ${fdate(p.ultCambioVarilla)}, hace más de 8 meses y medio. Si ya se hizo, registralo para reiniciar el ciclo.`,
+        when:`Sin registrar`, cat:"rentals",
         action:`Mant.registrarVarilla(${p.id})` });
     }
     // Reparaciones pendientes: aparecen apenas se cargan y hasta que se resuelven
@@ -767,6 +785,12 @@ const Filtros = {
   /* ---------- Leer los valores y volver a dibujar la tabla ---------- */
   aplicar(cual){
     const g = id => document.getElementById(id)?.value ?? "";
+    if (cual==="master") {
+      STATE.fMaster = { texto:g('fm_texto') };
+      const cont = document.getElementById('tablaFiltrada');
+      if (cont) cont.innerHTML = App.tablaMaestro();
+      return;
+    }
     if (cual==="sales") {
       STATE.fSales = {
         texto:g('fs_texto'), tipo:g('fs_tipo'), localidad:g('fs_localidad'),
@@ -784,12 +808,24 @@ const Filtros = {
   },
 
   limpiar(cual){
+    if (cual==="master") { STATE.fMaster = { texto:"" }; App.go(STATE.page); return; }
     if (cual==="sales") STATE.fSales = { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" };
     else STATE.fRentals = { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" };
     App.go(STATE.page);
   },
 
   /* ---------- Aplicar los filtros a las listas ---------- */
+  /* ---------- MAESTRO: búsqueda por texto ---------- */
+  filtrarMaestro(props){
+    const txt = (STATE.fMaster.texto||"").toLowerCase().trim();
+    if (!txt) return props;
+    return props.filter(p=>{
+      const campos = [p.codigo, p.titulo, p.direccion, p.localidad, p.tipo, p.propietario, p.propietarioAlq]
+        .map(x=>String(x||"").toLowerCase()).join(" ");
+      return campos.includes(txt);
+    });
+  },
+
   filtrarVentas(props){
     const f = STATE.fSales;
     const txt = (f.texto||"").toLowerCase().trim();
@@ -932,13 +968,35 @@ const App = {
 
   /* ---------- MAESTRO DE PROPIEDADES ---------- */
   render_properties(){
-    const rows = DB.properties;
+    if (!DB.properties.length)
+      return `
+      <div class="page-head">
+        <div><h2>Maestro de propiedades</h2><p>Base única. Una misma propiedad puede estar en venta y en alquiler.</p></div>
+        <button class="btn btn-primary" onclick="Prop.form()">${I.plus} Nueva propiedad</button>
+      </div>` + App.emptyState("No hay propiedades cargadas","Empezá cargando la primera propiedad.","Cargar propiedad","Prop.form()");
     return `
       <div class="page-head">
         <div><h2>Maestro de propiedades</h2><p>Base única. Una misma propiedad puede estar en venta y en alquiler.</p></div>
         <button class="btn btn-primary" onclick="Prop.form()">${I.plus} Nueva propiedad</button>
       </div>
-      ${rows.length ? `
+      <div class="filters">
+        <div class="filters-grid" style="grid-template-columns:1fr auto">
+          <div class="fg"><label>Buscar</label>
+            <input id="fm_texto" value="${esc(STATE.fMaster.texto)}" placeholder="Código, título, dirección, localidad o tipo…" oninput="Filtros.aplicar('master')"></div>
+          <div class="fg"><label>&nbsp;</label>
+            <button class="btn btn-sm" onclick="Filtros.limpiar('master')">Limpiar</button></div>
+        </div>
+      </div>
+      <div id="tablaFiltrada">${App.tablaMaestro()}</div>`;
+  },
+
+  // Tabla del maestro (se vuelve a dibujar sola al buscar)
+  tablaMaestro(){
+    const total = DB.properties.length;
+    const rows = Filtros.filtrarMaestro(DB.properties);
+    const contador = `<div class="filter-count" style="margin-bottom:10px">Mostrando <b>${rows.length}</b> de ${total} propiedades</div>`;
+    if (!rows.length) return contador + App.emptyState("Sin resultados","Ninguna propiedad coincide con la búsqueda.",null,null);
+    return contador + `
       <div class="table-wrap"><table>
         <thead><tr><th>Código</th><th>Propiedad</th><th>Tipo</th><th>Superficie</th><th>Operación</th><th>Drive</th><th>Visible col.</th><th></th></tr></thead>
         <tbody>
@@ -958,8 +1016,7 @@ const App = {
               </div></td>
             </tr>`).join("")}
         </tbody>
-      </table></div>` : App.emptyState("No hay propiedades cargadas","Empezá cargando la primera propiedad.","Cargar propiedad","Prop.form()")}
-    `;
+      </table></div>`;
   },
 
   /* ---------- VENTAS ---------- */
@@ -2111,7 +2168,10 @@ const Contract = {
         <div class="section">
           <div class="section-head">
             <h3>Historial de valores del alquiler</h3>
-            ${can()?`<button class="btn btn-sm" onclick="HistVal.form(${c.id})">${I.plus} Agregar registro</button>`:""}
+            ${can()?`<div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="Actualiz.recalcularDesdeHistorial(${c.id})" title="Recalcular la próxima actualización a partir del último valor">${I.money} Recalcular próxima</button>
+              <button class="btn btn-sm" onclick="HistVal.form(${c.id})">${I.plus} Agregar registro</button>
+            </div>`:""}
           </div>
           <div class="card">
             ${c.histValores.map((h,i)=>`
@@ -2323,6 +2383,34 @@ const Cobro = {
 
 /* ---------- Actualización asistida del alquiler ---------- */
 const Actualiz = {
+  /* Recalcula la próxima actualización a partir del último valor del historial.
+     Sirve cuando el alquiler ya se actualizó pero la fecha quedó vieja. */
+  recalcularDesdeHistorial(contractId){
+    const c = DB.contracts.find(c=>c.id===contractId);
+    if (!c) return;
+    const hist = (c.histValores||[]).slice().sort((a,b)=> a.desde < b.desde ? -1 : 1);
+    if (!hist.length) { alert("Este contrato no tiene historial de valores cargado.\nRegistrá la actualización con el botón «Actualizar»."); return; }
+    const ultimo = hist[hist.length-1];
+    const cada = c.actualizaCada || 3;
+    // avanzar de a un período desde el último valor, hasta caer en una fecha futura
+    let prox = addMonths(ultimo.desde, cada);
+    let vueltas = 0;
+    while (daysBetween(today, prox) < 0 && vueltas < 120) { prox = addMonths(prox, cada); vueltas++; }
+    const antes = c.proxActualiz;
+    if (!confirm(`El último valor del historial es ${fmt(ultimo.valor,c.moneda)} desde el ${fdate(ultimo.desde)}.\n\nLa próxima actualización pasaría del ${fdate(antes)} al ${fdate(prox)}.\n\n¿Confirmás?`)) return;
+    c.proxActualiz = prox;
+    // el valor vigente también se alinea con el historial
+    const vigentes = hist.filter(h=>h.desde <= today);
+    if (vigentes.length) {
+      c.valor = vigentes[vigentes.length-1].valor;
+      const p = prop(c.propId);
+      if (p) { p.valorAlquiler = c.valor; persist('properties', p); }
+    }
+    persist('contracts', c);
+    App.go(STATE.page);
+    setTimeout(()=>alert(`Listo.\nValor vigente: ${fmt(c.valor,c.moneda)}\nPróxima actualización: ${fdate(c.proxActualiz)}`),100);
+  },
+
   form(contractId){
     const c = DB.contracts.find(c=>c.id===contractId);
     const atraso = c.proxActualiz ? daysBetween(today, c.proxActualiz) : null;
@@ -2382,7 +2470,6 @@ const Actualiz = {
       vueltas++;
     }
     c.proxActualiz = prox;
-
     // reflejar el nuevo valor también en la propiedad
     const p = prop(c.propId);
     if (p) { p.valorAlquiler = nuevo; persist('properties', p); }
@@ -3127,10 +3214,20 @@ const HistVal = {
     Contract.view(contractId);
   },
 
-  // El valor vigente = el del registro más reciente que YA empezó a regir
+  // El valor vigente = el del registro más reciente que YA empezó a regir.
+  // Además se recalcula la próxima actualización a partir del último registro,
+  // para que la fecha no quede desfasada respecto del historial.
   sincronizarValor(c){
-    const vigentes = (c.histValores||[]).filter(h=>h.desde <= today);
+    const hist = (c.histValores||[]).slice().sort((a,b)=> a.desde < b.desde ? -1 : 1);
+    const vigentes = hist.filter(h=>h.desde <= today);
     if (vigentes.length) c.valor = vigentes[vigentes.length-1].valor;
+    if (hist.length) {
+      const cada = c.actualizaCada || 3;
+      let prox = addMonths(hist[hist.length-1].desde, cada);
+      let vueltas = 0;
+      while (daysBetween(today, prox) < 0 && vueltas < 120) { prox = addMonths(prox, cada); vueltas++; }
+      c.proxActualiz = prox;
+    }
   },
 };
 
