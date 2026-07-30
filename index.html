@@ -410,7 +410,8 @@ const STATE = { role:"admin", page:"dashboard", usuario:null,
   // Filtros de búsqueda (se mantienen mientras dura la sesión)
   fSales: { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" },
   fRentals: { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" },
-  fMaster: { texto:"" },
+  fMaster: { texto:"", orden:"codigo", dir:"asc" },
+  fContracts: { texto:"", estado:"", pago:"" },
 };
 
 /* ---------- Configuración de roles ---------- */
@@ -786,9 +787,15 @@ const Filtros = {
   aplicar(cual){
     const g = id => document.getElementById(id)?.value ?? "";
     if (cual==="master") {
-      STATE.fMaster = { texto:g('fm_texto') };
+      STATE.fMaster = { texto:g('fm_texto'), orden:g('fm_orden')||'codigo', dir:g('fm_dir')||'asc' };
       const cont = document.getElementById('tablaFiltrada');
       if (cont) cont.innerHTML = App.tablaMaestro();
+      return;
+    }
+    if (cual==="contracts") {
+      STATE.fContracts = { texto:g('fc_texto'), estado:g('fc_estado'), pago:g('fc_pago') };
+      const cont = document.getElementById('tablaFiltrada');
+      if (cont) cont.innerHTML = App.tablaContratos();
       return;
     }
     if (cual==="sales") {
@@ -808,7 +815,8 @@ const Filtros = {
   },
 
   limpiar(cual){
-    if (cual==="master") { STATE.fMaster = { texto:"" }; App.go(STATE.page); return; }
+    if (cual==="master") { STATE.fMaster = { texto:"", orden:"codigo", dir:"asc" }; App.go(STATE.page); return; }
+    if (cual==="contracts") { STATE.fContracts = { texto:"", estado:"", pago:"" }; App.go(STATE.page); return; }
     if (cual==="sales") STATE.fSales = { texto:"", tipo:"", localidad:"", estadoOp:"", precioMin:"", precioMax:"", moneda:"", credito:"" };
     else STATE.fRentals = { texto:"", tipo:"", localidad:"", contrato:"", precioMin:"", precioMax:"" };
     App.go(STATE.page);
@@ -816,14 +824,51 @@ const Filtros = {
 
   /* ---------- Aplicar los filtros a las listas ---------- */
   /* ---------- MAESTRO: búsqueda por texto ---------- */
+  filtrarContratos(contratos){
+    const f = STATE.fContracts;
+    const txt = (f.texto||"").toLowerCase().trim();
+    return contratos.filter(c=>{
+      const p = prop(c.propId);
+      if (txt) {
+        const campos = [p?.titulo, p?.codigo, c.inquilino, c.garante, c.garante2]
+          .map(x=>String(x||"").toLowerCase()).join(" ");
+        if (!campos.includes(txt)) return false;
+      }
+      if (f.estado && estadoContrato(c) !== f.estado) return false;
+      if (f.pago) {
+        const pend = (c.cuotas||[]).some(q=>!q.pagado);
+        if (f.pago === "impago" && !pend) return false;
+        if (f.pago === "aldia" && pend) return false;
+      }
+      return true;
+    });
+  },
+
   filtrarMaestro(props){
     const txt = (STATE.fMaster.texto||"").toLowerCase().trim();
-    if (!txt) return props;
-    return props.filter(p=>{
+    let res = props;
+    if (txt) res = props.filter(p=>{
       const campos = [p.codigo, p.titulo, p.direccion, p.localidad, p.tipo, p.propietario, p.propietarioAlq]
         .map(x=>String(x||"").toLowerCase()).join(" ");
       return campos.includes(txt);
     });
+    // ordenar
+    const orden = STATE.fMaster.orden || "codigo";
+    const dir = STATE.fMaster.dir === "desc" ? -1 : 1;
+    const val = p => {
+      if (orden==="codigo") return String(p.codigo||"");
+      if (orden==="titulo") return String(p.titulo||"").toLowerCase();
+      if (orden==="localidad") return String(p.localidad||"").toLowerCase();
+      if (orden==="tipo") return String(p.tipo||"").toLowerCase();
+      return "";
+    };
+    res = res.slice().sort((a,b)=>{
+      const va=val(a), vb=val(b);
+      if (va<vb) return -1*dir;
+      if (va>vb) return 1*dir;
+      return 0;
+    });
+    return res;
   },
 
   filtrarVentas(props){
@@ -980,9 +1025,21 @@ const App = {
         <button class="btn btn-primary" onclick="Prop.form()">${I.plus} Nueva propiedad</button>
       </div>
       <div class="filters">
-        <div class="filters-grid" style="grid-template-columns:1fr auto">
+        <div class="filters-grid" style="grid-template-columns:1fr 1fr auto auto">
           <div class="fg"><label>Buscar</label>
             <input id="fm_texto" value="${esc(STATE.fMaster.texto)}" placeholder="Código, título, dirección, localidad o tipo…" oninput="Filtros.aplicar('master')"></div>
+          <div class="fg"><label>Ordenar por</label>
+            <select id="fm_orden" onchange="Filtros.aplicar('master')">
+              <option value="codigo" ${STATE.fMaster.orden==='codigo'?'selected':''}>Código de propiedad</option>
+              <option value="titulo" ${STATE.fMaster.orden==='titulo'?'selected':''}>Título (A-Z)</option>
+              <option value="localidad" ${STATE.fMaster.orden==='localidad'?'selected':''}>Localidad</option>
+              <option value="tipo" ${STATE.fMaster.orden==='tipo'?'selected':''}>Tipo</option>
+            </select></div>
+          <div class="fg"><label>Sentido</label>
+            <select id="fm_dir" onchange="Filtros.aplicar('master')">
+              <option value="asc" ${STATE.fMaster.dir!=='desc'?'selected':''}>Ascendente</option>
+              <option value="desc" ${STATE.fMaster.dir==='desc'?'selected':''}>Descendente</option>
+            </select></div>
           <div class="fg"><label>&nbsp;</label>
             <button class="btn btn-sm" onclick="Filtros.limpiar('master')">Limpiar</button></div>
         </div>
@@ -1144,16 +1201,51 @@ const App = {
 
   /* ---------- CONTRATOS ---------- */
   render_contracts(){
+    if (!DB.contracts.length)
+      return `
+      <div class="page-head">
+        <div><h2>Contratos y cobros</h2><p>Contratos de alquiler, cuotas, cobros y cálculo de mora.</p></div>
+        <button class="btn btn-primary" onclick="Contract.form()">${I.plus} Nuevo contrato</button>
+      </div>` + App.emptyState("Sin contratos cargados","Cargá el primer contrato para registrar cobros.","Nuevo contrato","Contract.form()");
     return `
       <div class="page-head">
         <div><h2>Contratos y cobros</h2><p>Contratos de alquiler, cuotas, cobros y cálculo de mora.</p></div>
         <button class="btn btn-primary" onclick="Contract.form()">${I.plus} Nuevo contrato</button>
       </div>
-      ${DB.contracts.length?`
+      <div class="filters">
+        <div class="filters-head">
+          <h4>${I.search} Filtros de búsqueda</h4>
+          <button class="btn btn-sm" onclick="Filtros.limpiar('contracts')">Limpiar filtros</button>
+        </div>
+        <div class="filters-grid">
+          <div class="fg"><label>Buscar</label>
+            <input id="fc_texto" value="${esc(STATE.fContracts.texto)}" placeholder="Inquilino, propiedad, garante…" oninput="Filtros.aplicar('contracts')"></div>
+          <div class="fg"><label>Estado del contrato</label>
+            <select id="fc_estado" onchange="Filtros.aplicar('contracts')">
+              <option value="">Todos</option>
+              ${["A comenzar","Vigente","Finalizado","Rescindido"].map(o=>`<option ${STATE.fContracts.estado===o?'selected':''}>${o}</option>`).join("")}
+            </select></div>
+          <div class="fg"><label>Estado de pago</label>
+            <select id="fc_pago" onchange="Filtros.aplicar('contracts')">
+              <option value="">Todos</option>
+              <option value="impago" ${STATE.fContracts.pago==="impago"?'selected':''}>Con cuotas impagas</option>
+              <option value="aldia" ${STATE.fContracts.pago==="aldia"?'selected':''}>Al día</option>
+            </select></div>
+        </div>
+      </div>
+      <div id="tablaFiltrada">${App.tablaContratos()}</div>`;
+  },
+
+  tablaContratos(){
+    const total = DB.contracts.length;
+    const rows = Filtros.filtrarContratos(DB.contracts);
+    const contador = `<div class="filter-count" style="margin-bottom:10px">Mostrando <b>${rows.length}</b> de ${total} contratos</div>`;
+    if (!rows.length) return contador + App.emptyState("Sin resultados","Ningún contrato coincide con los filtros.",null,null);
+    return contador + `
       <div class="table-wrap"><table>
         <thead><tr><th>Propiedad / Inquilino</th><th>Vigencia</th><th>Valor</th><th>Actualización</th><th>Estado</th><th>Cobros</th><th></th></tr></thead>
         <tbody>
-          ${DB.contracts.map(c=>{
+          ${rows.map(c=>{
             const p = prop(c.propId);
             const pend = (c.cuotas||[]).filter(q=>!q.pagado).length;
             return `<tr>
@@ -1171,8 +1263,7 @@ const App = {
             </tr>`;
           }).join("")}
         </tbody>
-      </table></div>`:App.emptyState("Sin contratos cargados","Cargá el primer contrato para registrar cobros.","Nuevo contrato","Contract.form()")}
-    `;
+      </table></div>`;
   },
 
   /* ---------- ALARMAS ---------- */
@@ -2086,6 +2177,9 @@ const Contract = {
         <div class="field"><label>Moneda</label><select id="c_moneda"><option ${optSel(v('moneda','ARS'),'ARS')}>ARS</option><option ${optSel(v('moneda'),'USD')}>USD</option></select></div></div>
       <div class="form-row"><div class="field"><label>Actualiza cada (meses)</label><input id="c_cada" type="number" value="${esc(v('actualizaCada',3))}"></div>
         <div class="field"><label>Índice</label><select id="c_indice">${["ICL","IPC","Otro"].map(o=>`<option ${optSel(v('indice'),o)}>${o}</option>`).join("")}</select></div></div>
+      <div class="form-row"><div class="field"><label>Comisión mensual por administración (%)</label><input id="c_comisionMensual" type="number" step="0.1" value="${esc(v('comisionMensual'))}" placeholder="Ej: 8">
+          <div class="hint">Porcentaje que cobra la inmobiliaria sobre cada cuota. Se recalcula solo cuando se actualiza el alquiler.</div></div>
+        <div class="field"><label>&nbsp;</label><div class="hint" style="padding-top:8px">Se aplica sobre el valor del alquiler de cada mes.</div></div></div>
       <div class="form-row"><div class="field"><label>Comisión (monto total)</label><input id="c_deposito" type="number" value="${esc(v('deposito'))}">
           <div class="hint">Equivale a un mes de alquiler. El cobro (en una o varias cuotas) se registra dentro del contrato.</div></div>
         <div class="field"><label>Tipo de garantía</label><select id="c_garantia">${["Recibo de sueldo","Garantía propietaria","Seguro de caución"].map(o=>`<option ${optSel(v('garantia'),o)}>${o}</option>`).join("")}</select></div></div>
@@ -2112,6 +2206,7 @@ const Contract = {
         duracion:parseInt(g('duracion'))||null,
         valor:parseFloat(g('valor'))||0, moneda:g('moneda'), actualizaCada:parseInt(g('cada'))||3,
         indice:g('indice'), deposito:parseFloat(g('deposito'))||0, garantia:g('garantia'),
+        comisionMensual:parseFloat(g('comisionMensual'))||0,
         proxActualiz:gf('prox')||c.proxActualiz,
         estado: (g('estado')==="Automático" ? null : g('estado')) || null,
       });
@@ -2127,6 +2222,7 @@ const Contract = {
         inicio:gf('inicio'), fin:gf('fin'), duracion:parseInt(g('duracion'))||null,
         valor:parseFloat(g('valor'))||0, moneda:g('moneda'),
         actualizaCada:parseInt(g('cada'))||3, indice:g('indice'), deposito:parseFloat(g('deposito'))||0,
+        comisionMensual:parseFloat(g('comisionMensual'))||0,
         garantia:g('garantia'), proxActualiz: gf('inicio')?addMonths(gf('inicio'),parseInt(g('cada'))||3):null,
         estado:null, cuotas:[], docs:[],
         depositoPagos:[], histValores: gf('inicio')?[{desde:gf('inicio'), valor:parseFloat(g('valor'))||0}]:[]
@@ -2158,6 +2254,7 @@ const Contract = {
         ${item("Vigencia",`${fdate(c.inicio)} al ${fdate(c.fin)}`)}
         ${item("Valor actual",`${fmt(c.valor,c.moneda)} ${can()?`<button class="btn btn-sm" style="margin-left:8px;padding:3px 9px" onclick="Actualiz.form(${c.id})">${I.money} Actualizar</button>`:""}`)}
         ${item("Actualización",`cada ${c.actualizaCada}m · ${esc(c.indice)} · próx. ${fdate(c.proxActualiz)}`)}
+        ${c.comisionMensual?item("Comisión mensual",`${c.comisionMensual}% · ${fmt(Math.round(c.valor*c.comisionMensual/100),c.moneda)} por mes`):""}
         ${item("Garantía",esc(c.garantia||"—"))}
         ${item("Estado",App.contractBadge(estadoContrato(c)))}
         ${USAR_STORAGE
@@ -2208,7 +2305,7 @@ const Contract = {
       <div class="section"><div class="section-head"><h3>Cobros y cuotas</h3>
         ${can()?`<div class="row-actions"><button class="btn btn-sm" onclick="Cobro.addCuota(${c.id})">${I.plus} Mes actual</button><button class="btn btn-sm" onclick="Cobro.addCuota(${c.id},true)">${I.cal} Mes futuro</button></div>`:""}</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>Mes</th><th>Alquiler</th><th>Estado</th><th>Pago</th><th>Ajuste</th><th>Mora</th><th>Total</th><th></th></tr></thead>
+          <thead><tr><th>Mes</th><th>Alquiler</th><th>Estado</th><th>Pago</th><th>Ajuste</th><th>Mora</th><th>Total</th>${c.comisionMensual?'<th>Comisión</th>':''}<th></th></tr></thead>
           <tbody>
             ${(c.cuotas||[]).map((q,i)=>{
               let estadoCuota, moraCalc=q.moraTotal||0, ajuste=q.ajuste||0, total=q.monto+ajuste+(q.moraTotal||0);
@@ -2220,17 +2317,19 @@ const Contract = {
                 estadoCuota = dd>0?`<span class="badge red"><span class="dot"></span>Vencida (${dd}d)</span>`:'<span class="badge gray">Pendiente</span>';
                 total = q.monto;
               }
+              const comMes = c.comisionMensual ? Math.round(q.monto * c.comisionMensual/100) : 0;
               return `<tr><td class="t-strong">${q.mes}</td><td>${fmt(q.monto,c.moneda)}</td><td>${estadoCuota}</td>
                 <td>${q.pagado?fdate(q.fechaPago):"—"}</td>
                 <td>${(q.pagado&&ajuste)?`<span title="${esc(q.ajusteNota||'')}" style="cursor:help;border-bottom:1px dotted var(--ink-soft)">${ajuste>0?'+':''}${fmt(ajuste,c.moneda)}</span>`:"—"}</td>
                 <td>${moraCalc>0?fmt(moraCalc,c.moneda):"—"}</td>
                 <td class="t-strong">${fmt(total,c.moneda)}</td>
+                ${c.comisionMensual?`<td class="t-strong" style="color:var(--brand)">${fmt(comMes,c.moneda)}</td>`:''}
                 <td><div class="row-actions">
                   ${(!q.pagado&&can())?`<button class="btn btn-sm btn-primary" onclick="Cobro.form(${c.id},${i})">Cobrar</button>`:""}
                   ${can()?`<button class="icon-btn" title="Editar mes" onclick="Cobro.editCuota(${c.id},${i})">${I.edit}</button>`:""}
                   ${can()?`<button class="icon-btn" title="Eliminar mes" onclick="Cobro.delCuota(${c.id},${i})">${I.trash}</button>`:""}
                 </div></td></tr>`;
-            }).join("")||`<tr><td colspan="8" class="t-muted" style="text-align:center;padding:20px">Sin cuotas. Agregá el primer mes.</td></tr>`}
+            }).join("")||`<tr><td colspan="${c.comisionMensual?9:8}" class="t-muted" style="text-align:center;padding:20px">Sin cuotas. Agregá el primer mes.</td></tr>`}
           </tbody>
         </table></div>
         <div class="hint" style="margin-top:8px">La mora se habilita cuando la fecha de pago supera el día 10. El ajuste (positivo o negativo, con aclaración) no modifica el alquiler base. Pasá el cursor sobre un ajuste para ver el motivo.</div>
@@ -2397,6 +2496,11 @@ const Actualiz = {
     let vueltas = 0;
     while (daysBetween(today, prox) < 0 && vueltas < 120) { prox = addMonths(prox, cada); vueltas++; }
     const antes = c.proxActualiz;
+    // Si la fecha ya es la correcta, no hay nada que recalcular.
+    if (antes === prox) {
+      alert(`La próxima actualización ya está al día: ${fdate(prox)}.\n\nNo hace falta recalcular nada.`);
+      return;
+    }
     if (!confirm(`El último valor del historial es ${fmt(ultimo.valor,c.moneda)} desde el ${fdate(ultimo.desde)}.\n\nLa próxima actualización pasaría del ${fdate(antes)} al ${fdate(prox)}.\n\n¿Confirmás?`)) return;
     c.proxActualiz = prox;
     // el valor vigente también se alinea con el historial
@@ -2916,6 +3020,29 @@ const Reportes = {
       return s + pagos.reduce((ss,x)=>ss+(x.monto||0),0);
     },0);
 
+    // --- COMISIONES MENSUALES POR ADMINISTRACIÓN ---
+    // De cada cuota pagada en el período, la inmobiliaria cobra un % sobre el valor del alquiler.
+    let comAdminTotal = 0;
+    const comAdminDetalle = [];
+    contratos.forEach(c=>{
+      if (!c.comisionMensual) return;
+      let subtotal = 0, meses = 0;
+      (c.cuotas||[]).forEach(q=>{
+        if (!q.pagado) return;
+        // se cuenta por la fecha de pago; si no hay, por el mes de la cuota
+        const fechaRef = q.fechaPago || (q.mes+"-01");
+        if (!Reportes.enRango(fechaRef, r)) return;
+        subtotal += Math.round((q.monto||0) * c.comisionMensual/100);
+        meses++;
+      });
+      if (subtotal>0) {
+        comAdminTotal += subtotal;
+        const p = prop(c.propId);
+        comAdminDetalle.push({ titulo:p?.titulo||"Propiedad", inquilino:c.inquilino, pct:c.comisionMensual, meses, monto:subtotal, moneda:c.moneda });
+      }
+    });
+    comAdminDetalle.sort((a,b)=>b.monto-a.monto);
+
     const activos = contratos.filter(c=>estadoContrato(c)==="Vigente");
     const aComenzar = contratos.filter(c=>estadoContrato(c)==="A comenzar");
     const porVencer = contratos.filter(c=>{
@@ -2987,6 +3114,7 @@ const Reportes = {
       carteraUSD, carteraARS, potUSD, potARS, diasProm,
       // alquileres
       contratosNuevos: contratosNuevos.length, comAlqCobrada,
+      comAdminTotal, comAdminDetalle,
       activos: activos.length, aComenzar: aComenzar.length, porVencer: porVencer.length,
       porVencerLista: porVencer,
       // cobranza
@@ -3045,9 +3173,22 @@ const Reportes = {
       <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.money} Ingresos por comisiones</h3>
       <div class="stats" style="margin-bottom:8px">
         ${card("Comisiones por ventas", (d.comVentasUSD?fmt(d.comVentasUSD,"USD"):"") + (d.comVentasUSD&&d.comVentasARS?" + ":"") + (d.comVentasARS?fmt(d.comVentasARS,"ARS"):(d.comVentasUSD?"":"—")), `${d.vendidasPeriodo} ${d.vendidasPeriodo===1?'venta cerrada':'ventas cerradas'} en el período`, "var(--green)")}
-        ${card("Comisiones por alquileres", d.comAlqCobrada?fmt(d.comAlqCobrada,"ARS"):"—", `Cobrado en el período · ${d.contratosNuevos} ${d.contratosNuevos===1?'contrato nuevo':'contratos nuevos'}`, "var(--green)")}
+        ${card("Comisiones de administración", d.comAdminTotal?fmt(d.comAdminTotal,"ARS"):"—", "Sobre las cuotas cobradas en el período", "var(--green)")}
+        ${card("Comisiones nuevos contratos", d.comAlqCobrada?fmt(d.comAlqCobrada,"ARS"):"—", `Cobrado en el período · ${d.contratosNuevos} ${d.contratosNuevos===1?'contrato nuevo':'contratos nuevos'}`, "var(--green)")}
         ${card("Mora cobrada", d.moraCobrada?fmt(d.moraCobrada,"ARS"):"—", "Intereses por pagos fuera de término")}
       </div>
+      ${d.comAdminDetalle.length?`
+        <div class="card" style="margin-bottom:8px">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px">Comisiones de administración por contrato</div>
+          ${d.comAdminDetalle.map(x=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap">
+              <div><div class="t-strong">${esc(x.titulo)}</div><div class="t-muted">${esc(x.inquilino)} · ${x.pct}% · ${x.meses} ${x.meses===1?'mes':'meses'}</div></div>
+              <div class="t-strong" style="color:var(--green)">${fmt(x.monto,x.moneda)}</div>
+            </div>`).join("")}
+          <div style="display:flex;justify-content:space-between;padding:12px 16px;font-weight:700">
+            <span>Total del período</span><span style="color:var(--green)">${fmt(d.comAdminTotal,"ARS")}</span>
+          </div>
+        </div>`:""}
 
       <!-- OPERACIONES -->
       <h3 style="font-size:15px;color:var(--brand);margin:22px 0 12px;font-weight:700">${I.home} Operaciones</h3>
