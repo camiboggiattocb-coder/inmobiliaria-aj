@@ -604,10 +604,10 @@ function computeAlarms() {
     (c.cuotas||[]).forEach((q,qi) => {
       if (!q.pagado) {
         const dd = daysBetween(q.mes+"-10", today);
-        if (dd > 0) out.push({ level:"red", icon:I.warn,
+        if (dd >= 0) out.push({ level:"red", icon:I.warn,
           title:`Cuota impaga — ${p?.titulo||"Propiedad"}`,
           desc:`${c.inquilino}: cuota ${q.mes} vencida hace ${dd} días.`,
-          when:`Venció hace ${dd} días`, cat:"rentals",
+          when: dd===0?`Vence hoy`:`Venció hace ${dd} días`, cat:"rentals",
           action:`Cobro.form(${c.id},${qi})`, actionLabel:"Cobrar" });
       }
     });
@@ -2314,7 +2314,7 @@ const Contract = {
                 estadoCuota = (q.moraTotal>0)?'<span class="badge amber"><span class="dot"></span>Pagada c/mora</span>':(anticipado?'<span class="badge blue"><span class="dot"></span>Anticipado</span>':'<span class="badge green"><span class="dot"></span>Pagada</span>');
               } else {
                 const dd = daysBetween(q.mes+"-10", today);
-                estadoCuota = dd>0?`<span class="badge red"><span class="dot"></span>Vencida (${dd}d)</span>`:'<span class="badge gray">Pendiente</span>';
+                estadoCuota = dd>=0?`<span class="badge red"><span class="dot"></span>Vencida${dd>0?` (${dd}d)`:' hoy'}</span>`:'<span class="badge gray">Pendiente</span>';
                 total = q.monto;
               }
               const comMes = c.comisionMensual ? Math.round(q.monto * c.comisionMensual/100) : 0;
@@ -3065,7 +3065,7 @@ const Reportes = {
             moraCobrada += (q.moraTotal||0);
           } else {
             // ¿está vencida?
-            if (daysBetween(q.mes+"-10", today) > 0) { cuotasImpagas++; montoImpago += (q.monto||0); }
+            if (daysBetween(q.mes+"-10", today) >= 0) { cuotasImpagas++; montoImpago += (q.monto||0); }
           }
         }
       });
@@ -3076,7 +3076,7 @@ const Reportes = {
     let morososTotal=0, montoMorosoTotal=0;
     contratos.forEach(c=>{
       (c.cuotas||[]).forEach(q=>{
-        if (!q.pagado && daysBetween(q.mes+"-10", today) > 0) { morososTotal++; montoMorosoTotal += (q.monto||0); }
+        if (!q.pagado && daysBetween(q.mes+"-10", today) >= 0) { morososTotal++; montoMorosoTotal += (q.monto||0); }
       });
     });
 
