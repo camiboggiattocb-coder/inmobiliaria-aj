@@ -429,6 +429,46 @@ const fmt = (n, cur="ARS") => {
   const s = new Intl.NumberFormat("es-AR",{maximumFractionDigits:0}).format(n);
   return (cur==="USD"?"US$ ":"$ ") + s;
 };
+
+/* Interpreta un monto escrito a mano, tomando el punto como separador de miles
+   (formato argentino). "426.131" -> 426131, "1.250.000" -> 1250000.
+   Acepta también coma decimal: "1.250,50" -> 1250.5. Devuelve un número. */
+function parseMonto(txt){
+  if (txt == null) return 0;
+  let s = String(txt).trim().replace(/\$|\s/g, "");
+  if (!s) return 0;
+  // si tiene coma, la coma es el decimal y los puntos son miles
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else {
+    // solo puntos: son separadores de miles (los quitamos)
+    // salvo que sea claramente un decimal (un punto y 1-2 decimales), caso raro en alquileres
+    const partes = s.split(".");
+    if (partes.length === 2 && partes[1].length <= 2 && partes[0].length <= 3) {
+      // ej "426.13" -> lo dejamos como decimal (poco común, pero lo respetamos)
+      s = partes[0] + "." + partes[1];
+    } else {
+      s = s.replace(/\./g, "");
+    }
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+// Muestra un número con separador de miles para precargar un input de monto
+function montoInput(n){
+  if (n == null || n === "" || isNaN(n)) return "";
+  return new Intl.NumberFormat("es-AR",{maximumFractionDigits:2}).format(n);
+}
+// Avisa si un monto de alquiler parece demasiado bajo (posible error de carga:
+// el punto de los miles interpretado como decimal). Devuelve true si se puede seguir.
+function montoRazonable(n, etiqueta="alquiler"){
+  if (n > 0 && n < 1000) {
+    return confirm(`El ${etiqueta} quedó en ${fmt(n,"ARS")}, un valor muy bajo.\n\n` +
+      `Si escribiste el punto de los miles (por ejemplo 426.131), volvé a escribir el número. ` +
+      `El sistema ya toma el punto como separador de miles.\n\n¿Guardar igual con este monto?`);
+  }
+  return true;
+}
 const fdate = d => { if(!d) return "—"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
 const addMonths = (d, n) => { const dt = new Date(d+"T12:00:00"); dt.setMonth(dt.getMonth()+n); return isoDate(dt); };
@@ -574,8 +614,22 @@ function computeAlarms() {
   const out = [];
   DB.contracts.forEach(c => {
     const p = prop(c.propId);
-    // Los contratos finalizados o rescindidos ya no generan alarmas
     const est = estadoContrato(c);
+    // Las cuotas impagas se avisan SIEMPRE, aunque el contrato figure finalizado
+    // o rescindido: una cuota sin pagar es deuda real, no importa el estado.
+    // (Si la fecha de fin estuviera mal cargada, igual no se pierde el aviso.)
+    (c.cuotas||[]).forEach((q,qi) => {
+      if (!q.pagado) {
+        const dd = daysBetween(q.mes+"-10", today);
+        if (dd >= 0) out.push({ level:"red", icon:I.warn,
+          title:`Cuota impaga — ${p?.titulo||"Propiedad"}`,
+          desc:`${c.inquilino}: cuota ${q.mes} vencida hace ${dd} días.`,
+          when: dd===0?`Vence hoy`:`Venció hace ${dd} días`, cat:"rentals",
+          action:`Cobro.form(${c.id},${qi})`, actionLabel:"Cobrar" });
+      }
+    });
+    // El resto de las alarmas (actualización, vencimiento, varilla) solo aplican
+    // a contratos que siguen en curso.
     if (est === "Finalizado" || est === "Rescindido") return;
     if (c.proxActualiz) {
       const dd = daysBetween(today, c.proxActualiz);
@@ -601,16 +655,20 @@ function computeAlarms() {
         desc:`El contrato de ${c.inquilino} finaliza el ${fdate(c.fin)}`,
         when:`En ${dd} días`, cat:"rentals" });
     }
-    (c.cuotas||[]).forEach((q,qi) => {
-      if (!q.pagado) {
-        const dd = daysBetween(q.mes+"-10", today);
-        if (dd >= 0) out.push({ level:"red", icon:I.warn,
-          title:`Cuota impaga — ${p?.titulo||"Propiedad"}`,
-          desc:`${c.inquilino}: cuota ${q.mes} vencida hace ${dd} días.`,
-          when: dd===0?`Vence hoy`:`Venció hace ${dd} días`, cat:"rentals",
-          action:`Cobro.form(${c.id},${qi})`, actionLabel:"Cobrar" });
+    // Contrato vigente sin la cuota del mes en curso cargada:
+    // desde el día 10, avisa para que no se pase por alto un cobro.
+    if (est === "Vigente") {
+      const mesActual = today.slice(0,7);
+      const diaHoy = parseInt(today.slice(8,10));
+      const tieneCuotaMes = (c.cuotas||[]).some(q=>q.mes===mesActual);
+      if (!tieneCuotaMes && diaHoy >= 10) {
+        out.push({ level:"amber", icon:I.warn,
+          title:`Falta cargar la cuota del mes — ${p?.titulo||"Propiedad"}`,
+          desc:`${c.inquilino}: no está cargada la cuota de ${mesActual}. Agregala para registrar el cobro.`,
+          when:`Mes ${mesActual}`, cat:"rentals",
+          action:`Cobro.addCuota(${c.id})`, actionLabel:"Agregar mes" });
       }
-    });
+    }
   });
   // Termotanque: solo en propiedades en alquiler (para recordarle al inquilino)
   DB.properties.forEach(p => {
@@ -1593,7 +1651,7 @@ const Prop = {
         <h4>${I.money} Datos del cierre</h4>
         <div class="form-row">
           <div class="field"><label>Valor real de venta</label>
-            <input id="cv_valor" type="number" value="${precioPub||""}" oninput="Prop.recalcCierre(${id})">
+            <input id="cv_valor" type="text" inputmode="decimal" value="${montoInput(precioPub)}" oninput="Prop.recalcCierre(${id})">
             <div class="hint">El monto en el que se cerró finalmente la operación.</div></div>
           <div class="field"><label>Moneda</label>
             <select id="cv_moneda">
@@ -1617,7 +1675,7 @@ const Prop = {
 
   recalcCierre(id){
     const p = prop(id);
-    const valor = parseFloat(document.getElementById('cv_valor').value)||0;
+    const valor = parseMonto(document.getElementById('cv_valor').value);
     const moneda = document.getElementById('cv_moneda').value;
     const comPct = p.comision || 0;
     const comision = Math.round(valor * comPct/100);
@@ -1635,7 +1693,7 @@ const Prop = {
 
   confirmarVenta(id){
     const p = prop(id);
-    const valor = parseFloat(document.getElementById('cv_valor').value)||0;
+    const valor = parseMonto(document.getElementById('cv_valor').value);
     const moneda = document.getElementById('cv_moneda').value;
     const fecha = Fechas.get('cv_fecha') || today;
     const comprador = document.getElementById('cv_comprador').value.trim();
@@ -1961,7 +2019,7 @@ const Repar = {
         <div class="field"><label>Contratado para reparar</label>
           <input id="rp_contratado" value="${esc(r.contratado||"")}" placeholder="Ej: Juan Pérez (plomero)"></div>
         <div class="field"><label>Costo (pesos)</label>
-          <input id="rp_costo" type="number" value="${r.costo||""}" placeholder="0"></div>
+          <input id="rp_costo" type="text" inputmode="decimal" value="${montoInput(r.costo)}" placeholder="0"></div>
       </div>
       <div class="form-row">
         <div class="field"><label>¿Quién lo paga?</label>
@@ -1991,7 +2049,7 @@ const Repar = {
       fechaRot,
       fechaRep: fechaRep || "",
       contratado: g('contratado').trim(),
-      costo: parseFloat(g('costo'))||0,
+      costo: parseMonto(g('costo')),
       pagaQuien: g('pagaQuien'),
       drive: g('drive').trim(),
     };
@@ -2173,14 +2231,14 @@ const Contract = {
         <div class="field"><label>Fin</label>${dateInput('c_fin', v('fin'))}
           <div class="hint">Se calcula automáticamente, pero podés modificarla a mano si hace falta.</div></div>
       </div>
-      <div class="form-row"><div class="field"><label>Valor mensual</label><input id="c_valor" type="number" value="${esc(v('valor'))}"></div>
+      <div class="form-row"><div class="field"><label>Valor mensual</label><input id="c_valor" type="text" inputmode="decimal" value="${montoInput(v('valor'))}"></div>
         <div class="field"><label>Moneda</label><select id="c_moneda"><option ${optSel(v('moneda','ARS'),'ARS')}>ARS</option><option ${optSel(v('moneda'),'USD')}>USD</option></select></div></div>
       <div class="form-row"><div class="field"><label>Actualiza cada (meses)</label><input id="c_cada" type="number" value="${esc(v('actualizaCada',3))}"></div>
         <div class="field"><label>Índice</label><select id="c_indice">${["ICL","IPC","Otro"].map(o=>`<option ${optSel(v('indice'),o)}>${o}</option>`).join("")}</select></div></div>
       <div class="form-row"><div class="field"><label>Comisión mensual por administración (%)</label><input id="c_comisionMensual" type="number" step="0.1" value="${esc(v('comisionMensual'))}" placeholder="Ej: 8">
           <div class="hint">Porcentaje que cobra la inmobiliaria sobre cada cuota. Se recalcula solo cuando se actualiza el alquiler.</div></div>
         <div class="field"><label>&nbsp;</label><div class="hint" style="padding-top:8px">Se aplica sobre el valor del alquiler de cada mes.</div></div></div>
-      <div class="form-row"><div class="field"><label>Comisión (monto total)</label><input id="c_deposito" type="number" value="${esc(v('deposito'))}">
+      <div class="form-row"><div class="field"><label>Comisión (monto total)</label><input id="c_deposito" type="text" inputmode="decimal" value="${montoInput(v('deposito'))}">
           <div class="hint">Equivale a un mes de alquiler. El cobro (en una o varias cuotas) se registra dentro del contrato.</div></div>
         <div class="field"><label>Tipo de garantía</label><select id="c_garantia">${["Recibo de sueldo","Garantía propietaria","Seguro de caución"].map(o=>`<option ${optSel(v('garantia'),o)}>${o}</option>`).join("")}</select></div></div>
       ${id?`<div class="form-row"><div class="field"><label>Próxima actualización</label>${dateInput('c_prox', v('proxActualiz'))}</div>
@@ -2199,13 +2257,14 @@ const Contract = {
     const g = k=>{ const el=document.getElementById('c_'+k); return el?el.value:""; };
     const gf = k=>Fechas.get('c_'+k);   // fechas como aaaa-mm-dd
     if (!g('inquilino')) { alert("Poné el nombre del inquilino."); return; }
+    if (!montoRazonable(parseMonto(g('valor')), "valor mensual del alquiler")) return;
     if (id) {
       const c = DB.contracts.find(c=>c.id===id);
       Object.assign(c, {
         inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'), inicio:gf('inicio'), fin:gf('fin'),
         duracion:parseInt(g('duracion'))||null,
-        valor:parseFloat(g('valor'))||0, moneda:g('moneda'), actualizaCada:parseInt(g('cada'))||3,
-        indice:g('indice'), deposito:parseFloat(g('deposito'))||0, garantia:g('garantia'),
+        valor:parseMonto(g('valor')), moneda:g('moneda'), actualizaCada:parseInt(g('cada'))||3,
+        indice:g('indice'), deposito:parseMonto(g('deposito')), garantia:g('garantia'),
         comisionMensual:parseFloat(g('comisionMensual'))||0,
         proxActualiz:gf('prox')||c.proxActualiz,
         estado: (g('estado')==="Automático" ? null : g('estado')) || null,
@@ -2220,12 +2279,12 @@ const Contract = {
       const nuevo = {
         id:DB.nextId.contracts++, propId, inquilino:g('inquilino'), garante:g('garante'), garante2:g('garante2'),
         inicio:gf('inicio'), fin:gf('fin'), duracion:parseInt(g('duracion'))||null,
-        valor:parseFloat(g('valor'))||0, moneda:g('moneda'),
-        actualizaCada:parseInt(g('cada'))||3, indice:g('indice'), deposito:parseFloat(g('deposito'))||0,
+        valor:parseMonto(g('valor')), moneda:g('moneda'),
+        actualizaCada:parseInt(g('cada'))||3, indice:g('indice'), deposito:parseMonto(g('deposito')),
         comisionMensual:parseFloat(g('comisionMensual'))||0,
         garantia:g('garantia'), proxActualiz: gf('inicio')?addMonths(gf('inicio'),parseInt(g('cada'))||3):null,
         estado:null, cuotas:[], docs:[],
-        depositoPagos:[], histValores: gf('inicio')?[{desde:gf('inicio'), valor:parseFloat(g('valor'))||0}]:[]
+        depositoPagos:[], histValores: gf('inicio')?[{desde:gf('inicio'), valor:parseMonto(g('valor'))}]:[]
       };
       DB.contracts.push(nuevo);
       persist('contracts', nuevo);
@@ -2368,7 +2427,7 @@ const Cobro = {
       ${(esFuturo&&!yaPagado)?`<div class="notice">${I.info}<div>Estás registrando un <b>cobro anticipado</b>: este mes todavía no comenzó. No se aplicará mora salvo que la fecha lo amerite.</div></div>`:""}
       <div class="form-row">
         <div class="field"><label>Mes</label><input value="${q.mes}" disabled></div>
-        <div class="field"><label>Valor del alquiler de este mes</label><input id="co_monto" type="number" value="${q.monto}" oninput="Cobro.recalc(${contractId},${idx})">
+        <div class="field"><label>Valor del alquiler de este mes</label><input id="co_monto" type="text" inputmode="decimal" value="${montoInput(q.monto)}" oninput="Cobro.recalc(${contractId},${idx})">
           <div class="hint">Podés ajustar el alquiler de este mes puntual si hace falta.</div></div>
       </div>
       <div class="form-row one">
@@ -2378,7 +2437,7 @@ const Cobro = {
       <div class="form-section">
         <h4>${I.money} Ajuste del mes (opcional)</h4>
         <div class="form-row">
-          <div class="field"><label>Monto del ajuste (${c.moneda})</label><input id="co_ajuste" type="number" value="${q.ajuste||0}" oninput="Cobro.recalc(${contractId},${idx})">
+          <div class="field"><label>Monto del ajuste (${c.moneda})</label><input id="co_ajuste" type="text" inputmode="decimal" value="${montoInput(q.ajuste||0)}" oninput="Cobro.recalc(${contractId},${idx})">
             <div class="hint">Negativo para descontar (ej. –15000), positivo para sumar.</div></div>
           <div class="field"><label>Aclaración del ajuste</label><input id="co_ajusteNota" value="${esc(q.ajusteNota||'')}" placeholder="Ej: compensación arreglo luz garage"></div>
         </div>
@@ -2400,7 +2459,7 @@ const Cobro = {
   recalc(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
     const q = c.cuotas[idx];
-    const monto = parseFloat(document.getElementById('co_monto').value)||0;
+    const monto = parseMonto(document.getElementById('co_monto').value);
     const fecha = Fechas.get('co_fecha');
     const dd = daysBetween(q.mes+"-10", fecha);
     const conMora = dd>0;
@@ -2408,7 +2467,7 @@ const Cobro = {
     const aviso = document.getElementById('co_aviso');
     if (conMora) aviso.innerHTML = `<span style="color:var(--red)">Pago ${dd} días después del día 10 → corresponde mora.</span>`;
     else aviso.innerHTML = `<span style="color:var(--green)">Pago en término o anticipado (hasta el día 10). Sin mora.</span>`;
-    const ajuste = parseFloat(document.getElementById('co_ajuste').value)||0;
+    const ajuste = parseMonto(document.getElementById('co_ajuste').value);
     const pct = conMora ? (parseFloat(document.getElementById('co_pct').value)||0) : 0;
     const fija = conMora ? (parseFloat(document.getElementById('co_fija').value)||0) : 0;
     const moraPct = Math.round(monto * pct/100);
@@ -2424,11 +2483,12 @@ const Cobro = {
   save(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
     const q = c.cuotas[idx];
-    const monto = parseFloat(document.getElementById('co_monto').value)||0;
+    const monto = parseMonto(document.getElementById('co_monto').value);
+    if (!montoRazonable(monto, "alquiler de este mes")) return;
     const fecha = Fechas.get('co_fecha');
     const dd = daysBetween(q.mes+"-10", fecha);
     const conMora = dd>0;
-    const ajuste = parseFloat(document.getElementById('co_ajuste').value)||0;
+    const ajuste = parseMonto(document.getElementById('co_ajuste').value);
     const ajusteNota = document.getElementById('co_ajusteNota').value.trim();
     if (ajuste && !ajusteNota) { alert("Poné una aclaración para el ajuste del monto."); return; }
     const pct = conMora ? (parseFloat(document.getElementById('co_pct').value)||0) : 0;
@@ -2596,14 +2656,14 @@ const Deposito = {
         <div class="field"><label>Falta cobrar</label><input value="${fmt(falta>0?falta:0,c.moneda)}" disabled></div>
       </div>
       <div class="form-row">
-        <div class="field"><label>Monto del pago (${c.moneda})</label><input id="dp_monto" type="number" value="${falta>0?falta:0}"></div>
+        <div class="field"><label>Monto del pago (${c.moneda})</label><input id="dp_monto" type="text" inputmode="decimal" value="${montoInput(falta>0?falta:0)}"></div>
         <div class="field"><label>Fecha</label>${dateInput('dp_fecha', today)}</div>
       </div>
     `, `<button class="btn" onclick="Contract.view(${contractId})">Volver</button><button class="btn btn-primary" onclick="Deposito.save(${contractId})">Registrar pago</button>`);
   },
   save(contractId){
     const c = DB.contracts.find(c=>c.id===contractId);
-    const monto = parseFloat(document.getElementById('dp_monto').value)||0;
+    const monto = parseMonto(document.getElementById('dp_monto').value);
     const fecha = Fechas.get('dp_fecha') || today;
     if (monto<=0) { alert("Ingresá un monto válido."); return; }
     c.depositoPagos = c.depositoPagos || [];
@@ -3313,7 +3373,7 @@ const HistVal = {
           ${dateInput('hv_desde', h.desde||today)}
           <div class="hint">Fecha en que este valor empezó a regir.</div></div>
         <div class="field"><label>Valor del alquiler (${esc(c.moneda)})</label>
-          <input id="hv_valor" type="number" value="${h.valor||""}"></div>
+          <input id="hv_valor" type="text" inputmode="decimal" value="${montoInput(h.valor)}"></div>
       </div>
       ${editando?`<div class="hint">Guardado hoy en la base como: <b>${esc(h.desde)}</b> (formato interno año-mes-día).</div>`:""}
     `, `<button class="btn" onclick="Contract.view(${contractId})">Cancelar</button>
@@ -3323,9 +3383,10 @@ const HistVal = {
   guardar(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
     const desde = Fechas.get('hv_desde');
-    const valor = parseFloat(document.getElementById('hv_valor').value)||0;
+    const valor = parseMonto(document.getElementById('hv_valor').value);
     if (!desde) { alert("Poné la fecha desde la que rige."); return; }
     if (valor<=0) { alert("Poné un valor válido."); return; }
+    if (!montoRazonable(valor, "valor del alquiler")) return;
 
     c.histValores = c.histValores || [];
     if (idx != null) c.histValores[idx] = { desde, valor };
