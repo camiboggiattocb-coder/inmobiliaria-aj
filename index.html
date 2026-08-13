@@ -655,18 +655,20 @@ function computeAlarms() {
         desc:`El contrato de ${c.inquilino} finaliza el ${fdate(c.fin)}`,
         when:`En ${dd} días`, cat:"rentals" });
     }
-    // Contrato vigente sin la cuota del mes en curso cargada:
-    // desde el día 10, avisa para que no se pase por alto un cobro.
+    // Contrato vigente al que le falta la cuota del mes en curso:
+    // pasado el día 10, se muestra como CUOTA IMPAGA (una sola alarma, coherente
+    // con las cuotas ya cargadas). El botón crea la cuota y abre el cobro.
     if (est === "Vigente") {
       const mesActual = today.slice(0,7);
       const diaHoy = parseInt(today.slice(8,10));
       const tieneCuotaMes = (c.cuotas||[]).some(q=>q.mes===mesActual);
       if (!tieneCuotaMes && diaHoy >= 10) {
-        out.push({ level:"amber", icon:I.warn,
-          title:`Falta cargar la cuota del mes — ${p?.titulo||"Propiedad"}`,
-          desc:`${c.inquilino}: no está cargada la cuota de ${mesActual}. Agregala para registrar el cobro.`,
-          when:`Mes ${mesActual}`, cat:"rentals",
-          action:`Cobro.addCuota(${c.id})`, actionLabel:"Agregar mes" });
+        const dd = diaHoy - 10;
+        out.push({ level:"red", icon:I.warn,
+          title:`Cuota impaga — ${p?.titulo||"Propiedad"}`,
+          desc:`${c.inquilino}: cuota ${mesActual} ${dd===0?'vence hoy':'vencida hace '+dd+' días'}.`,
+          when: dd===0?`Vence hoy`:`Venció hace ${dd} días`, cat:"rentals",
+          action:`Cobro.cobrarMes(${c.id},'${mesActual}')`, actionLabel:"Cobrar" });
       }
     }
   });
@@ -2416,6 +2418,22 @@ const Cobro = {
     c.cuotas.push({ mes, monto:c.valor, pagado:false, fechaPago:null, moraPct:0, moraFija:0, moraTotal:0, ajuste:0, ajusteNota:"" });
     persist('contracts', DB.contracts.find(c=>c.id===contractId));
     Contract.view(contractId);
+  },
+  // Crea la cuota de un mes puntual (si no existe) y abre directamente el cobro.
+  // La usa la alarma de cuota impaga cuando el mes todavía no fue cargado.
+  cobrarMes(contractId, mes){
+    const c = DB.contracts.find(c=>c.id===contractId);
+    if (!c) return;
+    c.cuotas = c.cuotas || [];
+    let idx = c.cuotas.findIndex(q=>q.mes===mes);
+    if (idx < 0) {
+      c.cuotas.push({ mes, monto:c.valor, pagado:false, fechaPago:null, moraPct:0, moraFija:0, moraTotal:0, ajuste:0, ajusteNota:"" });
+      // ordenar por mes para que quede prolijo
+      c.cuotas.sort((a,b)=> a.mes < b.mes ? -1 : 1);
+      idx = c.cuotas.findIndex(q=>q.mes===mes);
+      persist('contracts', c);
+    }
+    Cobro.form(contractId, idx);
   },
   form(contractId, idx){
     const c = DB.contracts.find(c=>c.id===contractId);
